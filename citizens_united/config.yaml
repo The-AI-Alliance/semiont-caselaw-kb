@@ -1,0 +1,35 @@
+# Citizens United v. FEC Dataset Configuration
+#
+# Supreme Court case demonstrating:
+# - Legal opinion processing
+# - Fixed-size chunking
+# - Table of Contents with linked references
+# - Legal citation detection and tagging
+
+name: citizens_united
+displayName: Citizens United v. FEC
+emoji: ⚖️
+handler: cornell-lii
+
+# Cornell LII configuration
+url: https://www.law.cornell.edu/supct/html/08-205.ZS.html
+cacheFile: /tmp/citizens_united.html
+
+# Processing options
+shouldChunk: true
+chunkSize: 5000  # ~2-3 pages per chunk
+
+# Entity types for tagging
+entityTypes:
+  - legal
+  - supreme-court
+  - campaign-finance
+  - first-amendment
+  - LegalCitation
+
+# Table of Contents
+createTableOfContents: true
+tocTitle: Citizens United v. FEC - Table of Contents
+
+# Citation detection
+detectCitations: true

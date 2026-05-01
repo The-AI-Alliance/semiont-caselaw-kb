@@ -1,0 +1,35 @@
+# Caselaw Dataset Configuration
+#
+# Legal case documents from HuggingFace demonstrating:
+# - Multi-document workflow (fetches multiple separate documents)
+# - HuggingFace dataset integration
+# - Legal document processing
+# - Table of Contents with references to multiple documents
+
+name: caselaw
+displayName: New Hampshire Supreme Court Cases
+emoji: ⚖️
+handler: huggingface
+
+# HuggingFace configuration (upstream dataset identifier preserved)
+dataset: free-law/nh
+count: 100
+cacheFile: /tmp/caselaw.json
+
+# Processing options
+shouldChunk: false  # Each document is a separate resource
+isMultiDocument: true  # Uses loadDocuments instead of loadText
+
+# Entity types for tagging
+entityTypes:
+  - legal
+  - case-law
+  - new-hampshire
+  - LegalCitation
+
+# Table of Contents
+createTableOfContents: true
+tocTitle: New Hampshire Supreme Court Cases (Sample)
+
+# Citation detection
+detectCitations: true  # Enable citation detection for legal documents
