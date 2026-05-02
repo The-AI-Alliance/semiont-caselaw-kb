@@ -18,6 +18,68 @@ import { fetchFirstNDocuments, convertLegalCaseDocument, type DocumentInfo } fro
 import { downloadCornellLII, formatLegalOpinion } from '../../src/legal-text.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
+/**
+ * The full entity-type vocabulary this KB uses across all eleven skills.
+ * Declared via `frame.addEntityTypes` once on each ingest run — idempotent,
+ * so re-runs are harmless. This is what makes `browse.entityTypes()` return
+ * a coherent published vocabulary.
+ */
+const KB_ENTITY_TYPES = [
+  // Case resource types
+  'Case',
+  'JudicialOpinion',
+  'SupremeCourt',
+  'StateCourt',
+  // Stub-resource type for CourtListener-fetched cases (skill 6)
+  'CourtListenerStub',
+  // Statutory-framework types
+  'Statute',
+  'FederalStatute',
+  'Regulation',
+  'ConstitutionalProvision',
+  // mark-judicial-entities entity types (people + roles + adjudicative bodies)
+  'Person',
+  'Judge',
+  'Plaintiff',
+  'Defendant',
+  'Petitioner',
+  'Respondent',
+  'Appellant',
+  'Appellee',
+  'Counsel',
+  'Court',
+  'Jurisdiction',
+  'Date',
+  'LegalStandard',
+  'Doctrine',
+  // build-party-roster output
+  'Party',
+  // detect-citations tagging vocabulary (eyecite-derived types)
+  'Citation',
+  'FullCaseCitation',
+  'ShortCaseCitation',
+  'IdCitation',
+  'SupraCitation',
+  'StatutoryCitation',
+  // tag-irac vocabulary (skill 4)
+  'Issue',
+  'Rule',
+  'Application',
+  'Conclusion',
+  // subsequent-treatment vocabulary (skill 10) — controlled tag schema
+  'positive',
+  'negative',
+  'distinguished',
+  'criticized',
+  'overruled',
+  'neutral',
+  // Synthesized aggregates
+  'PrecedentGraph',
+  'SubsequentTreatment',
+  'DoctrinalTrace',
+  'Aggregate',
+];
+
 interface CaselawConfig {
   name?: string;
   displayName?: string;
@@ -172,6 +234,10 @@ async function main(): Promise<void> {
     email: process.env.SEMIONT_USER_EMAIL!,
     password: process.env.SEMIONT_USER_PASSWORD!,
   });
+
+  // Declare this KB's entity-type vocabulary via frame. Idempotent.
+  console.log(`Declaring ${KB_ENTITY_TYPES.length} entity types via frame...`);
+  await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
 
   let created = 0;
   let failed = 0;

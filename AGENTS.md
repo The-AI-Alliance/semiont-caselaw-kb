@@ -19,7 +19,7 @@ If you're an AI assistant working in this repo, this file is your orientation. T
 
 | Skill | What it does | New SDK verbs |
 |---|---|---|
-| [`ingest-cases`](skills/ingest-cases/) | Read every `<corpus>/config.yaml`, fetch the source, create one resource per case | `yield.resource` |
+| [`ingest-cases`](skills/ingest-cases/) | Read every `<corpus>/config.yaml`, declare the KB's entity-type vocabulary, fetch the source, create one resource per case | `frame.addEntityTypes`, `yield.resource` |
 | [`detect-citations`](skills/detect-citations/) | Run eyecite over each case; record one annotation per citation | `mark.annotation` × *N* |
 | [`mark-judicial-entities`](skills/mark-judicial-entities/) | Detect Person, Judge, Plaintiff, Defendant, Counsel, Court, Date, LegalStandard mentions | `mark.assist` (linking) |
 | [`tag-irac`](skills/tag-irac/) | Apply IRAC tags (Issue / Rule / Application / Conclusion) to substantive paragraphs | `mark.assist` (tagging) |

@@ -29,6 +29,7 @@ Recognized config fields (per file):
 
 ## SDK verbs
 
+- `frame.addEntityTypes` — declares this KB's full entity-type vocabulary on every run (idempotent). The constant `KB_ENTITY_TYPES` at the top of `script.ts` is the published vocabulary.
 - `yield.resource` — one call per discovered case
 
 ## Tier-3 interactive checkpoint
