@@ -1,7 +1,47 @@
 /**
  * subsequent-treatment — for a target case, walk every citing case and
- * classify the treatment via mark.assist (tagging), then synthesize a
- * SubsequentTreatment resource summarizing.
+ * classify the treatment, then synthesize a SubsequentTreatment resource
+ * summarizing.
+ *
+ * IMPLEMENTATION SHAPE (current — workaround):
+ *   mark.assist with motivation 'linking' and entityTypes carrying the
+ *   treatment vocabulary (positive / negative / distinguished / criticized
+ *   / overruled / neutral), declared via frame.addEntityTypes upfront. Each
+ *   tagged span is a linking annotation whose body carries the chosen value.
+ *
+ * IMPLEMENTATION SHAPE (intended end state):
+ *   mark.assist with motivation 'tagging' and schemaId 'legal-citation-treatment',
+ *   passing the treatment values as `categories`. Each tagged span is a tagging
+ *   annotation with a 'classifying'-purpose body identifying the schema and a
+ *   'tagging'-purpose body with the chosen category. Cleaner — no per-skill
+ *   frame.addEntityTypes call, instructions text shrinks (the registry's
+ *   per-category descriptions and examples carry the same information into
+ *   the worker's prompt), and the resulting annotations live on the schema
+ *   layer rather than as ad-hoc linking annotations.
+ *
+ * WHY THE WORKAROUND TODAY:
+ *   `legal-citation-treatment` is not yet a registered schema in
+ *   packages/ontology/src/tag-schemas.ts (the current registry has only
+ *   legal-irac, scientific-imrad, argument-toulmin). Until it lands there,
+ *   motivation 'tagging' would throw "Invalid tag schema". Treatment fits
+ *   the structural-analysis pattern that registry was built for — fixed
+ *   enum, methodology-bound semantics, broadly applicable across legal-
+ *   citation analysis — and belongs in the canonical registry rather than
+ *   as a per-corpus vocabulary.
+ *
+ * MIGRATION (when 'legal-citation-treatment' lands upstream):
+ *   1. Drop the `await semiont.frame.addEntityTypes(TREATMENT_TAG_SCHEMA)` call.
+ *   2. Change the per-citing-case mark.assist call:
+ *        from: { entityTypes: TREATMENT_TAGS, instructions: scopedInstructions }
+ *              with motivation 'linking'
+ *        to:   { schemaId: 'legal-citation-treatment', categories: TREATMENT_TAG_SCHEMA }
+ *              with motivation 'tagging'
+ *   3. Change the aggregation filter from `motivation === 'linking'` to
+ *      `motivation === 'tagging'`.
+ *   4. Delete the TREATMENT_INSTRUCTIONS const — the registry's category
+ *      descriptions and examples are passed to the worker automatically.
+ *   5. Delete this header section; replace with a brief "Uses the
+ *      legal-citation-treatment schema" note.
  *
  * Usage: tsx skills/subsequent-treatment/script.ts <targetCaseResourceId> [--interactive]
  */
@@ -144,6 +184,10 @@ async function main(): Promise<void> {
     perCaseAnnotations.get(k)!.push(hit);
   }
 
+  // Make sure the treatment vocabulary is published before the linking pass
+  // attempts to use it. Idempotent — re-runs are harmless.
+  await semiont.frame.addEntityTypes(TREATMENT_TAG_SCHEMA);
+
   for (const citingCaseId of perCaseAnnotations.keys()) {
     const hits = perCaseAnnotations.get(citingCaseId)!;
     const scopedInstructions =
@@ -152,7 +196,7 @@ async function main(): Promise<void> {
     try {
       const progress = await semiont.mark.assist(
         ridBrand(citingCaseId),
-        'tagging',
+        'linking',
         {
           entityTypes: TREATMENT_TAGS,
           instructions: scopedInstructions,
@@ -183,7 +227,9 @@ async function main(): Promise<void> {
     const annotations = await semiont.browse.annotations(ridBrand(citingCaseId));
     const taggedHits: { treatments: string[]; quote: string }[] = [];
     for (const ann of annotations) {
-      if (ann.motivation !== 'tagging') continue;
+      // Treatment annotations have motivation 'linking' (vocabulary-classification
+      // shape); inspect the tagging-purpose body for treatment values.
+      if (ann.motivation !== 'linking') continue;
       const tags = (ann.body ?? [])
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
         .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]))

@@ -1,31 +1,20 @@
 /**
- * tag-irac — apply IRAC tags to substantive paragraphs in each case.
+ * tag-irac — apply IRAC tags to substantive paragraphs in each case via the
+ * registered `legal-irac` tag schema (packages/ontology/src/tag-schemas.ts).
  *
- * mark.assist with motivation 'tagging' and a four-value tag schema
- * (Issue / Rule / Application / Conclusion). The model is instructed to
- * skip narrative/procedural paragraphs.
+ * mark.assist with motivation 'tagging' requires a registered schemaId plus
+ * the categories to apply. The worker validates both against the registry
+ * and stamps the resulting annotation with a 'classifying'-purpose body
+ * (the schema id) and a 'tagging'-purpose body (the chosen category).
  *
  * Usage: tsx skills/tag-irac/script.ts [<resourceId>] [--interactive]
  */
 
-import { SemiontClient, entityType, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontClient, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
-const DEFAULT_INSTRUCTIONS = `
-For each substantive paragraph in this judicial opinion, apply one of:
-  - Issue       (the legal question presented)
-  - Rule        (the legal rule applied or articulated)
-  - Application (the application of the rule to the facts)
-  - Conclusion  (the disposition or holding)
-Apply at most one tag per paragraph. Skip paragraphs that are:
-  - factual narration of the case background
-  - procedural posture / docket history
-  - meta-commentary or footnote discussion
-The tag value should be exactly one of "Issue", "Rule", "Application", "Conclusion".
-`.trim();
-
-const INSTRUCTIONS = process.env.IRAC_INSTRUCTIONS ?? DEFAULT_INSTRUCTIONS;
-const IRAC_TAGS = ['Issue', 'Rule', 'Application', 'Conclusion'].map(entityType);
+const SCHEMA_ID = 'legal-irac';
+const CATEGORIES = ['Issue', 'Rule', 'Application', 'Conclusion'];
 
 function getMediaType(r: any): string | undefined {
   const reps = Array.isArray(r.representations)
@@ -68,7 +57,8 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `Will run mark.assist (motivation: tagging, IRAC schema) against ${targets.length} case(s).`,
+    `Will run mark.assist (motivation: tagging, schemaId: ${SCHEMA_ID}, ` +
+      `categories: ${CATEGORIES.join(', ')}) against ${targets.length} case(s).`,
   );
   const proceed = await confirm('Proceed?', true);
   if (!proceed) {
@@ -81,8 +71,8 @@ async function main(): Promise<void> {
   let totalCreated = 0;
   for (const rId of targets) {
     const progress = await semiont.mark.assist(rId, 'tagging', {
-      instructions: INSTRUCTIONS,
-      entityTypes: IRAC_TAGS,
+      schemaId: SCHEMA_ID,
+      categories: CATEGORIES,
     });
     const n = progress.progress?.createdCount ?? 0;
     totalCreated += n;

@@ -6,12 +6,30 @@ Real United States case law — Supreme Court opinions and state appellate cases
 
 This repository contains two subsets of real, public-domain U.S. case law:
 
-- **[`citizens_united/`](citizens_united/)** — *Citizens United v. FEC*, the 2010 Supreme Court decision on campaign finance and First Amendment rights. Sourced from the [Cornell Legal Information Institute](https://www.law.cornell.edu/supct/html/08-205.ZS.html), chunked into ~5KB segments with a linked Table of Contents.
+- **[`citizens_united/`](citizens_united/)** — *Citizens United v. FEC*, the 2010 Supreme Court decision on campaign finance and First Amendment rights. Sourced from the [Cornell Legal Information Institute](https://www.law.cornell.edu/supct/html/08-205.ZS.html); ingested as a single resource per opinion (the `ingest-cases` skill does not split opinions into chunks).
 - **[`caselaw/`](caselaw/)** — A 100-case sample of New Hampshire Supreme Court opinions, ingested as separate resources from the HuggingFace [`free-law/nh`](https://huggingface.co/datasets/free-law/nh) dataset.
 
-Both subsets ship with citation detection enabled. The [`src/`](src/) directory contains TypeScript helpers for legal citation handling (`legal-citations.ts`, `legal-text.ts`) and per-source handlers for Cornell LII and HuggingFace ingestion. The Python script [`detect_citations.py`](detect_citations.py) wraps the [eyecite](https://github.com/freelawproject/eyecite) library for high-precision legal-citation extraction (matching cases like *Bush v. Gore, 531 U.S. 98 (2000)* with their exact source text positions).
+Both subsets ship with citation detection enabled. The [`src/`](src/) directory contains TypeScript helpers — `eyecite.ts` (Node-side wrapper that spawns the Python eyecite container), `courtlistener.ts` (Citation Lookup API client), `uscode.ts` (US Code bulk XML lookup), `huggingface.ts` and `legal-text.ts` (per-source ingestion helpers). The Python script [`skills/detect-citations/detect_citations.py`](skills/detect-citations/detect_citations.py) wraps the [eyecite](https://github.com/freelawproject/eyecite) library for high-precision legal-citation extraction (matching cases like *Bush v. Gore, 531 U.S. 98 (2000)* with their exact source text positions); see [`skills/detect-citations/`](skills/detect-citations/) for the full Python container Dockerfile.
 
 This corpus is well-suited for entity recognition across cases, justices, parties, and statutes; building citation graphs across precedent; tracking doctrinal evolution; and demonstrating end-to-end legal knowledge graph construction with verifiable provenance.
+
+## Skills
+
+This repo ships eleven skills that build a layered caselaw-research KB on top of the Semiont SDK. See [AGENTS.md](AGENTS.md) for the full design discussion.
+
+| Skill | What it does |
+|---|---|
+| [`ingest-cases`](skills/ingest-cases/SKILL.md) | Walk every `<corpus>/config.yaml`, fetch source (HuggingFace `free-law/*` or Cornell LII), create one resource per case. |
+| [`detect-citations`](skills/detect-citations/SKILL.md) | Run eyecite over each case; record one annotation per citation with text-position selectors. |
+| [`mark-judicial-entities`](skills/mark-judicial-entities/SKILL.md) | Detect Person, Judge, Plaintiff, Defendant, Counsel, Court, Date, LegalStandard mentions. |
+| [`tag-irac`](skills/tag-irac/SKILL.md) | Apply IRAC tags (Issue / Rule / Application / Conclusion) to substantive paragraphs. |
+| [`assess-holdings`](skills/assess-holdings/SKILL.md) | Flag central holdings, dicta, dispositions, procedural-posture statements. |
+| [`ground-citations`](skills/ground-citations/SKILL.md) | Resolve each citation to a local Case resource or fetch from CourtListener; statutory citations route to skill 8. |
+| [`build-citation-graph`](skills/build-citation-graph/SKILL.md) | Synthesize a PrecedentGraph resource per case summarizing its citation neighborhood. |
+| [`extract-statutory-refs`](skills/extract-statutory-refs/SKILL.md) | Resolve statutory citations to Statute resources fetched from US Code bulk XML. |
+| [`build-party-roster`](skills/build-party-roster/SKILL.md) | Promote every Person/Judge/Plaintiff/etc. mention to a canonical Party resource. |
+| [`subsequent-treatment`](skills/subsequent-treatment/SKILL.md) | For a target case, classify how every citing case treats it (positive / negative / distinguished / criticized / overruled / neutral). |
+| [`doctrinal-trace`](skills/doctrinal-trace/SKILL.md) | Capstone — given a doctrine query, synthesize a research memo across the corpus. |
 
 ## Quick Start
 
@@ -25,9 +43,24 @@ This repo follows the same layout and startup flow as [`semiont-template-kb`](ht
 
 ### Open in Codespaces
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new/The-AI-Alliance/semiont-caselaw-kb)
+Install the [GitHub CLI (`gh`)](https://cli.github.com/) if you haven't already.
 
-> **Before launching:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with this repo selected. Otherwise the backend comes up but inference is non-functional until you add the secret and rebuild the container.
+> **Before creating:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with this repo selected. Otherwise the backend comes up but inference is non-functional until you add the secret and rebuild the container.
+
+Create the codespace on a premium machine for faster builds and more headroom:
+
+```bash
+gh codespace create --repo The-AI-Alliance/semiont-caselaw-kb --machine premiumLinux
+```
+
+Forward the backend port to your local machine, then fetch the auto-generated admin credentials:
+
+```bash
+gh codespace ports forward 4000:4000
+gh codespace ssh -- cat .devcontainer/admin.json
+```
+
+The credentials let you log in via the Semiont browser — see [Quick Start: Codespaces](https://github.com/The-AI-Alliance/semiont-template-kb#quick-start-codespaces) on the template-kb README for the full browser-side flow.
 
 ## License
 
