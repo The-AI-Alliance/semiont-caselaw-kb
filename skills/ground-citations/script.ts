@@ -93,7 +93,8 @@ async function main(): Promise<void> {
     const annotations = await semiont.browse.annotations(rId);
     for (const ann of annotations) {
       if (ann.motivation !== 'linking') continue;
-      const tags = (ann.body ?? [])
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      const tags = bodies
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
         .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
       if (!tags.includes('Citation')) continue;
@@ -101,7 +102,7 @@ async function main(): Promise<void> {
         statutoryCount++;
         continue;
       }
-      const isBound = (ann.body ?? []).some(
+      const isBound = bodies.some(
         (b: any) => b.type === 'SpecificResource' && b.purpose === 'linking',
       );
       if (isBound) {
@@ -112,10 +113,21 @@ async function main(): Promise<void> {
       // the most specific one for logging.
       const citationType =
         tags.find((t: string) => t !== 'Citation') ?? 'UnspecifiedCitation';
+      const target = ann.target;
+      const selectors =
+        typeof target === 'string' || !target.selector
+          ? []
+          : Array.isArray(target.selector)
+            ? target.selector
+            : [target.selector];
+      let text = '';
+      for (const s of selectors) {
+        if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
+      }
       reporterCitations.push({
         rId,
         annId: ann.id,
-        text: ann.target?.selector?.exact ?? '',
+        text,
         citationType,
       });
     }
@@ -155,6 +167,7 @@ async function main(): Promise<void> {
 
   for (const a of reporterCitations) {
     const gather = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
+    if (!('response' in gather)) continue;
     const context = gather.response as GatheredContext;
     const matchResult = await semiont.match.search(a.rId, a.annId, context, {
       limit: 5,

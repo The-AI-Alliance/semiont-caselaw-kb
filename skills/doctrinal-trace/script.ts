@@ -125,12 +125,23 @@ async function main(): Promise<void> {
   for (const c of candidates) {
     const annotations = await semiont.browse.annotations(c.rId);
     for (const ann of annotations) {
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
       if (ann.motivation === 'tagging') {
-        const tags = (ann.body ?? [])
+        const tags = bodies
           .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
           .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
         if (tags.includes('Rule') || tags.includes('Application')) {
-          const text = ann.target?.selector?.exact ?? '';
+          const target = ann.target;
+          const selectors =
+            typeof target === 'string' || !target.selector
+              ? []
+              : Array.isArray(target.selector)
+                ? target.selector
+                : [target.selector];
+          let text = '';
+          for (const s of selectors) {
+            if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
+          }
           if (text) {
             c.iracExcerpts.push({
               tag: tags.find((t: string) => t === 'Rule' || t === 'Application') ?? 'unknown',
@@ -140,11 +151,11 @@ async function main(): Promise<void> {
         }
       }
       if (ann.motivation === 'linking') {
-        const tags = (ann.body ?? [])
+        const tags = bodies
           .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
           .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
         if (tags.includes('Citation')) {
-          const targets = (ann.body ?? [])
+          const targets = bodies
             .filter((b: any) => b.type === 'SpecificResource' && b.purpose === 'linking')
             .map((b: any) => b.source as string);
           if (targets.length > 0) c.outgoingCount++;
@@ -163,11 +174,12 @@ async function main(): Promise<void> {
     const annotations = await semiont.browse.annotations(ridBrand(r['@id']));
     for (const ann of annotations) {
       if (ann.motivation !== 'linking') continue;
-      const tags = (ann.body ?? [])
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      const tags = bodies
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
         .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
       if (!tags.includes('Citation')) continue;
-      const targets = (ann.body ?? [])
+      const targets = bodies
         .filter((b: any) => b.type === 'SpecificResource' && b.purpose === 'linking')
         .map((b: any) => b.source as string);
       for (const t of targets) {

@@ -59,14 +59,19 @@ async function getLatestReleasePoint(): Promise<string> {
     throw new Error(`Failed to list US Code release points: ${response.status}`);
   }
   const html = await response.text();
-  const matches = [...html.matchAll(/href="(?<rp>\d{3}-\d+)\/?"/g)].map(
-    (m) => m.groups!.rp,
-  );
+  const matches: string[] = [];
+  for (const m of html.matchAll(/href="(?<rp>\d{3}-\d+)\/?"/g)) {
+    if (m.groups?.rp) matches.push(m.groups.rp);
+  }
   if (matches.length === 0) {
     throw new Error('No US Code release points found at uscode.house.gov.');
   }
   matches.sort();
-  releasePointCache = matches[matches.length - 1];
+  const latest = matches[matches.length - 1];
+  if (!latest) {
+    throw new Error('No US Code release points found at uscode.house.gov.');
+  }
+  releasePointCache = latest;
   return releasePointCache;
 }
 
@@ -122,12 +127,12 @@ function findSectionFragment(xml: string, title: string, section: string): strin
     'i',
   );
   const m = xml.match(re);
-  return m ? m[0] : null;
+  return m && m[0] ? m[0] : null;
 }
 
 function extractHeading(fragment: string): string {
   const m = fragment.match(/<heading[^>]*>([\s\S]*?)<\/heading>/i);
-  if (!m) return '';
+  if (!m || !m[1]) return '';
   return stripXml(m[1]);
 }
 
@@ -174,6 +179,6 @@ export async function getUsCodeSection(
  */
 export function parseUsCodeCitation(text: string): { title: string; section: string } | null {
   const m = text.match(/(\d+)\s*U\.?\s*S\.?\s*C\.?\s*[§§]?\s*([\d.()A-Za-z-]+)/);
-  if (!m) return null;
+  if (!m || !m[1] || !m[2]) return null;
   return { title: m[1], section: m[2] };
 }

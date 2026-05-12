@@ -137,6 +137,10 @@ export async function citationLookup(citationText: string): Promise<CourtListene
     return null;
   }
   const cluster = firstWithCluster.clusters![0];
+  if (!cluster) {
+    writeCache(citationText, null);
+    return null;
+  }
 
   const result: CourtListenerCase = {
     absoluteUrl: cluster.absolute_url ?? '',

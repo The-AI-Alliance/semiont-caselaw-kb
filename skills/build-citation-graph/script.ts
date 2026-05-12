@@ -87,11 +87,12 @@ async function main(): Promise<void> {
     const annotations = await semiont.browse.annotations(info.rIdBrand);
     for (const ann of annotations) {
       if (ann.motivation !== 'linking') continue;
-      const tags = (ann.body ?? [])
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      const tags = bodies
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
         .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
       if (!tags.includes('Citation')) continue;
-      const targets = (ann.body ?? [])
+      const targets = bodies
         .filter((b: any) => b.type === 'SpecificResource' && b.purpose === 'linking')
         .map((b: any) => b.source as string);
       for (const t of targets) {

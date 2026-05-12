@@ -86,19 +86,31 @@ async function main(): Promise<void> {
     const annotations = await semiont.browse.annotations(rId);
     for (const ann of annotations) {
       if (ann.motivation !== 'linking') continue;
-      const tags = (ann.body ?? [])
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      const tags = bodies
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
         .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
       if (!tags.includes('Citation')) continue;
-      const targets = (ann.body ?? [])
+      const targets = bodies
         .filter((b: any) => b.type === 'SpecificResource' && b.purpose === 'linking')
         .map((b: any) => b.source as string);
       if (!targets.includes(targetIdArg)) continue;
+      const annTarget = ann.target;
+      const selectors =
+        typeof annTarget === 'string' || !annTarget.selector
+          ? []
+          : Array.isArray(annTarget.selector)
+            ? annTarget.selector
+            : [annTarget.selector];
+      let citationText = '';
+      for (const s of selectors) {
+        if (s.type === 'TextQuoteSelector') { citationText = s.exact; break; }
+      }
       citingHits.push({
         citingCaseId: rId,
         citingCaseName: r.name ?? r['@id'],
         annId: ann.id,
-        citationText: ann.target?.selector?.exact ?? '',
+        citationText,
       });
     }
   }
@@ -139,6 +151,8 @@ async function main(): Promise<void> {
 
   for (const citingCaseId of perCaseAnnotations.keys()) {
     const hits = perCaseAnnotations.get(citingCaseId)!;
+    const firstHit = hits[0];
+    if (!firstHit) continue;
     try {
       const progress = await semiont.mark.assist(
         ridBrand(citingCaseId),
@@ -150,9 +164,9 @@ async function main(): Promise<void> {
         },
       );
       const n = createdCount(progress);
-      console.log(`  ${hits[0].citingCaseName}: ${n} treatment tag(s)`);
+      console.log(`  ${firstHit.citingCaseName}: ${n} treatment tag(s)`);
     } catch (err) {
-      console.warn(`  ! ${hits[0].citingCaseName}: ${(err as Error).message}`);
+      console.warn(`  ! ${firstHit.citingCaseName}: ${(err as Error).message}`);
     }
   }
 
@@ -178,20 +192,31 @@ async function main(): Promise<void> {
       // `purpose: 'tagging'` body carrying the treatment value and a
       // `purpose: 'classifying'` body identifying the schema.
       if (ann.motivation !== 'tagging') continue;
-      const tags = (ann.body ?? [])
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      const tags = bodies
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
         .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]))
         .filter((t: string) => TREATMENT_CATEGORIES.includes(t));
       if (tags.length === 0) continue;
-      taggedHits.push({
-        treatments: tags,
-        quote: ann.target?.selector?.exact ?? '',
-      });
+      const target = ann.target;
+      const selectors =
+        typeof target === 'string' || !target.selector
+          ? []
+          : Array.isArray(target.selector)
+            ? target.selector
+            : [target.selector];
+      let quote = '';
+      for (const s of selectors) {
+        if (s.type === 'TextQuoteSelector') { quote = s.exact; break; }
+      }
+      taggedHits.push({ treatments: tags, quote });
       for (const t of tags) breakdown.set(t, (breakdown.get(t) ?? 0) + 1);
     }
     if (taggedHits.length === 0) continue;
+    const firstHit = hits[0];
+    if (!firstHit) continue;
     rows.push({
-      citingCaseName: hits[0].citingCaseName,
+      citingCaseName: firstHit.citingCaseName,
       citingCaseId,
       treatments: Array.from(new Set(taggedHits.flatMap((h) => h.treatments))),
       quotes: taggedHits.map((h) => h.quote).filter(Boolean),

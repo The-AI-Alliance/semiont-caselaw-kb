@@ -247,6 +247,7 @@ async function main(): Promise<void> {
     const format = isMarkdown ? 'text/markdown' : 'text/plain';
     for (let i = 0; i < documents.length; i++) {
       const doc = documents[i];
+      if (!doc) continue;
       const safeName = doc.title.replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 80);
       const storageUri = `file://${corpus.subdir}/case-${i + 1}-${safeName}.${isMarkdown ? 'md' : 'txt'}`;
       try {

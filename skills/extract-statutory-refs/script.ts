@@ -70,18 +70,30 @@ async function main(): Promise<void> {
     const annotations = await semiont.browse.annotations(rId);
     for (const ann of annotations) {
       if (ann.motivation !== 'linking') continue;
-      const tags = (ann.body ?? [])
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      const tags = bodies
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
         .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
       if (!tags.includes('StatutoryCitation')) continue;
-      const isBound = (ann.body ?? []).some(
+      const isBound = bodies.some(
         (b: any) => b.type === 'SpecificResource' && b.purpose === 'linking',
       );
       if (isBound) continue;
+      const target = ann.target;
+      const selectors =
+        typeof target === 'string' || !target.selector
+          ? []
+          : Array.isArray(target.selector)
+            ? target.selector
+            : [target.selector];
+      let text = '';
+      for (const s of selectors) {
+        if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
+      }
       statutoryAnnotations.push({
         rId,
         annId: ann.id,
-        text: ann.target?.selector?.exact ?? '',
+        text,
       });
     }
   }
