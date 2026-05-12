@@ -154,7 +154,7 @@ async function main(): Promise<void> {
   let remoteCallsUsed = 0;
 
   for (const a of reporterCitations) {
-    const gather = await semiont.gather.annotation(a.annId, a.rId, { contextWindow: 1500 });
+    const gather = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
     const context = gather.response as GatheredContext;
     const matchResult = await semiont.match.search(a.rId, a.annId, context, {
       limit: 5,

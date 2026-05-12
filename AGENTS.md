@@ -10,12 +10,11 @@ If you're an AI assistant working in this repo, this file is your orientation. T
 - **`src/`** — small helper modules:
   - `src/huggingface.ts` — HuggingFace `free-law/*` dataset client (rows API, document conversion)
   - `src/legal-text.ts` — Cornell LII opinion fetcher + markdown formatter
-  - `src/eyecite.ts` — Node-side wrapper that spawns the Python eyecite container and parses the citation JSON
   - `src/courtlistener.ts` — REST client for the Free Law Project's CourtListener Citation Lookup API, with file-cache to stay under the free-tier rate limit
   - `src/uscode.ts` — US Code lookup against `uscode.house.gov` bulk XML, cached locally per title
   - `src/interactive.ts` — `confirm` / `pick` / `preview` helpers for tier-3 interactive checkpoints
-- **`skills/detect-citations/`** — Dockerfile + `detect_citations.py` for the Python eyecite runtime.
-- **`skills/`** — eleven skills, each shipping a `SKILL.md` plus a `script.ts` that uses `@semiont/sdk` against the running backend.
+- **`skills/detect-citations/`** — the only skill that's not a single `script.ts`. Ships a bash wrapper (`run.sh`) driving a three-phase pipeline: `fetch.ts` (Node) → `detect_citations.py` (Python, in the `semiont-eyecite` container) → `emit.ts` (Node). Plus a `Dockerfile` for the Python runtime.
+- **`skills/`** — eleven skills, each shipping a `SKILL.md` plus a `script.ts` that uses `@semiont/sdk` against the running backend. (`detect-citations` is the exception — see above.)
 
 | Skill | What it does | New SDK verbs |
 |---|---|---|
@@ -92,7 +91,7 @@ Each skill's `SKILL.md` shows a `container run` invocation that mounts the repo,
 container build -t semiont-eyecite:latest skills/detect-citations
 ```
 
-Then `src/eyecite.ts` spawns `container run --rm -i semiont-eyecite:latest` per case-text input. Substitute `docker build` / `docker run` (or podman) if those are your runtimes; `src/eyecite.ts` honors the `CONTAINER_RUNTIME` env var.
+Then run [`skills/detect-citations/run.sh`](skills/detect-citations/run.sh), which orchestrates the three-phase pipeline: a Node container fetches case bodies via the SDK, a host-side `for` loop pipes each body through `container run --rm -i semiont-eyecite:latest`, and a second Node container emits one `mark.annotation` per detected citation. The wrapper honors `CONTAINER_RUNTIME` (defaults to `container`; substitute `docker` / `podman` as needed).
 
 ## Backend setup
 
@@ -122,7 +121,7 @@ Skills are parameterized in three tiers.
 | `SEMIONT_USER_EMAIL` | Authenticating user |
 | `SEMIONT_USER_PASSWORD` | Authenticating user's password |
 | `COURTLISTENER_API_KEY` | Optional; raises CourtListener rate-limit ceiling |
-| `CONTAINER_RUNTIME` | `container` / `docker` / `podman` (default `container`) — used by `src/eyecite.ts` |
+| `CONTAINER_RUNTIME` | `container` / `docker` / `podman` (default `container`) — used by `skills/detect-citations/run.sh` |
 | `EYECITE_IMAGE_TAG` | Default `semiont-eyecite:latest` — override if you tag the image differently |
 
 ### Tier 2 — skill-invocation parameters

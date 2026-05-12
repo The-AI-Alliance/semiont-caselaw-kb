@@ -6,76 +6,76 @@ user-invocable: true
 allowed-tools: Bash, Read, Write
 ---
 
-You are helping the user build the citation layer over an ingested caselaw corpus. eyecite is the [Free Law Project](https://github.com/freelawproject/eyecite)'s deterministic regex/NLP citation extractor — orders of magnitude cheaper and more accurate than asking an LLM to do this. The skill spawns a Python container with eyecite installed, pipes case text through `detect_citations.py`, and parses the JSON output into `mark.annotation` calls with `TextPositionSelector`s.
+You are helping the user build the citation layer over an ingested caselaw corpus. eyecite is the [Free Law Project](https://github.com/freelawproject/eyecite)'s deterministic regex/NLP citation extractor — orders of magnitude cheaper and more accurate than asking an LLM to do this.
 
 This skill **does not** use `mark.assist`. The detection is deterministic; the annotations are recorded with their exact eyecite-reported byte positions.
 
 ## What it does
 
-For each Case resource (or one specific resource):
+Three phases, orchestrated by [`run.sh`](run.sh):
 
-1. Fetch the case body via `browse.resourceContent`.
-2. Spawn the eyecite container, pipe the body in via stdin, parse the JSON of detected citations.
-3. For each citation: `mark.annotation` with motivation `linking`, body containing a `tagging` TextualBody that records the eyecite citation type (`FullCaseCitation`, `ShortCaseCitation`, `IdCitation`, `SupraCitation`, `StatutoryCitation`, etc.) and an `entity-type-tagging` TextualBody for `Citation`.
+1. **Fetch** — for each Case resource (or one specific `<resourceId>`), call `browse.resourceContent` and stage the body on disk at `.cache/citation-detection/<resourceId>.body`. Runs inside a Node container ([`fetch.ts`](fetch.ts)).
+2. **Detect** — for each staged body, pipe it through the `semiont-eyecite` container. The Python script ([`detect_citations.py`](detect_citations.py)) reads stdin and writes a JSON citation list to stdout. The bash wrapper captures each into `<resourceId>.citations.json`.
+3. **Emit** — read every `.citations.json` and call `mark.annotation` once per detected citation. Motivation `linking`; body carries a `tagging` TextualBody for `Citation` and a second one for the eyecite citation type (`FullCaseCitation`, `ShortCaseCitation`, `IdCitation`, `SupraCitation`, `FullLawCitation`, etc.). Runs inside a Node container ([`emit.ts`](emit.ts)).
 
-Each annotation stays unresolved (no `SpecificResource` body item yet) — `ground-citations` (skill 6) walks these annotations and resolves them.
+Each annotation stays unresolved (no `SpecificResource` body item yet) — `ground-citations` (skill 6) walks them and resolves to actual cases / statutes.
+
+## Why three phases instead of one script
+
+`mark.assist`-based skills run as a single tsx call inside a Node container. This one can't — eyecite is Python, which lives in a separate container, and Apple's `container` runtime doesn't expose a socket for nested-container spawning. So the per-case `cat body | container run eyecite` step happens on the host between the two Node containers (which handle the SDK fetch and emit). The bash wrapper enforces the shape; the data flow is a textbook ingestion pipeline.
 
 ## SDK verbs
 
-- `browse.resources`, `browse.resourceContent`, `mark.annotation` × *N citations*
+- `browse.resources`, `browse.resourceContent` (phase 1)
+- `mark.annotation` × *N citations* (phase 3)
 
 ## Parameters
 
 | Parameter | Type | Default | Purpose |
 |---|---|---|---|
 | `<resourceId>` | CLI arg (optional) | all Case resources | Restrict to one case |
-
-## Tier-3 interactive checkpoint
-
-Per case: prints citation count + type breakdown, asks `confirm` before bulk-creating annotations.
+| `SEMIONT_API_URL` | env | discovered via `HOST_ADDR` probe | Backend URL |
+| `SEMIONT_USER_EMAIL` | env | `admin@example.com` | Auth |
+| `SEMIONT_USER_PASSWORD` | env | `password` | Auth |
+| `CONTAINER_RUNTIME` | env | `container` | Runtime to use (also `docker`/`podman`) |
+| `EYECITE_IMAGE_TAG` | env | `semiont-eyecite:latest` | Override the eyecite image tag |
 
 ## Run it
 
 **Prerequisites:**
-1. `ingest-cases` (skill 1) has been run.
-2. The eyecite container image is built:
+1. `ingest-cases` has been run.
+2. The eyecite container image is built (one-time):
 
 ```bash
 container build -t semiont-eyecite:latest skills/detect-citations
 ```
 
-(Substitute `docker build` / `podman build` if those are your runtime.)
-
 Then:
 
 ```bash
-HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
-
-container run --rm -v "$(pwd):/work" -w /work \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
-  -e CONTAINER_RUNTIME=docker \
-  node:24-alpine \
-  sh -c 'apk add --no-cache docker-cli && npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/detect-citations/script.ts'
+bash skills/detect-citations/run.sh
 ```
 
-The Docker socket mount is needed because `src/eyecite.ts` shells out to the container runtime to spawn the Python container *from within* the Node container. If you're running the Node script on the host directly (npm install + tsx on host, with Apple Container runtime), use:
+Or against a single case:
 
 ```bash
-SEMIONT_API_URL=http://localhost:4000 \
-SEMIONT_USER_EMAIL=admin@example.com \
-SEMIONT_USER_PASSWORD=<your-password> \
-CONTAINER_RUNTIME=container \
-npx tsx skills/detect-citations/script.ts
+bash skills/detect-citations/run.sh 55a7cf35c0fa4e83ba5250d24dfc39e2
 ```
 
-Add `-e SEMIONT_INTERACTIVE=1 -it` (or just `--interactive` for the host-direct path) to enable the per-case confirm prompt.
+The wrapper handles the three-phase dance. Output of each phase is logged.
+
+## Output / on-disk artifacts
+
+Intermediate files land in `.cache/citation-detection/` (already in `.gitignore`):
+
+- `<resourceId>.body` — the markdown body fetched in phase 1
+- `<resourceId>.citations.json` — eyecite's output for that case
+
+The wrapper clears these at the start of each run so stale results from a prior invocation don't get re-emitted in phase 3.
 
 ## Guidance for the AI assistant
 
-- **eyecite is deterministic.** Re-running on the same case produces the same citation set. But re-running creates *duplicate annotations* — there's no dedup in this skill. Restart the backend or hand-delete the prior annotations to start fresh.
-- **The Python container spawn happens once per case.** Image-already-built case: ~200–400 ms per spawn, dominated by container startup. For a 100-case corpus, expect ~30–60 s of detection wall-time.
-- **Citation types matter for downstream skills.** `StatutoryCitation` annotations are routed to skill 8 (`extract-statutory-refs`) instead of skill 6. The type tag on each annotation is what skill 8 keys off of.
+- **eyecite is deterministic.** Re-running on the same case produces the same citation set. But the skill creates *new* mark.annotation records each time — no dedup. Restart the backend or hand-delete prior annotations to start fresh.
+- **One container invocation per case in phase 2.** ~200–400 ms of container startup per call. For a 100-case corpus, expect ~30–60 s of detection wall-time on top of LLM-free citation extraction. Batching multiple bodies through one eyecite invocation is a future optimization (requires changes to `detect_citations.py`'s stdin protocol).
+- **Citation types matter for downstream skills.** `extract-statutory-refs` keys off the `FullLawCitation` / statutory subset; `ground-citations` handles `FullCaseCitation` / `ShortCaseCitation` / `IdCitation` / `SupraCitation`. The tag body on each annotation is what those skills read.
 - **Spans use `TextPositionSelector`.** eyecite reports byte offsets in the source text. The annotation records both `start` and `end` so resolution doesn't need to re-scan the document text.

@@ -10,6 +10,7 @@
 
 import { SemiontClient, entityType, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { createdCount } from '../../src/mark-result.js';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -74,7 +75,7 @@ async function main(): Promise<void> {
   let totalCreated = 0;
   for (const rId of targets) {
     const progress = await semiont.mark.assist(rId, 'linking', { entityTypes: ENTITY_TYPES });
-    const n = progress.progress?.createdCount ?? 0;
+    const n = createdCount(progress);
     totalCreated += n;
     console.log(`  ${rId}: ${n} new annotations`);
   }

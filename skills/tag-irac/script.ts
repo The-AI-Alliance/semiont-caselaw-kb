@@ -1,20 +1,22 @@
 /**
- * tag-irac — apply IRAC tags to substantive paragraphs in each case via the
- * registered `legal-irac` tag schema (packages/ontology/src/tag-schemas.ts).
+ * tag-irac — apply IRAC tags to substantive paragraphs in each case using
+ * the `legal-irac` tag schema.
  *
- * mark.assist with motivation 'tagging' requires a registered schemaId plus
- * the categories to apply. The worker validates both against the registry
- * and stamps the resulting annotation with a 'classifying'-purpose body
- * (the schema id) and a 'tagging'-purpose body (the chosen category).
+ * Tag schemas are runtime-registered per KB (see semiont's
+ * .plans/TAG-SCHEMAS-GAP.md). This skill self-registers `legal-irac`
+ * before calling `mark.assist`; re-runs are silent at the projection
+ * layer because the content matches.
  *
  * Usage: tsx skills/tag-irac/script.ts [<resourceId>] [--interactive]
  */
 
 import { SemiontClient, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { createdCount } from '../../src/mark-result.js';
+import { LEGAL_IRAC_SCHEMA } from '../../src/tag-schemas.js';
 
-const SCHEMA_ID = 'legal-irac';
-const CATEGORIES = ['Issue', 'Rule', 'Application', 'Conclusion'];
+const SCHEMA_ID = LEGAL_IRAC_SCHEMA.id;
+const CATEGORIES = LEGAL_IRAC_SCHEMA.tags.map((t) => t.name);
 
 function getMediaType(r: any): string | undefined {
   const reps = Array.isArray(r.representations)
@@ -34,6 +36,10 @@ async function main(): Promise<void> {
     email: process.env.SEMIONT_USER_EMAIL!,
     password: process.env.SEMIONT_USER_PASSWORD!,
   });
+
+  // Register the schema before any mark.assist call. Idempotent — the
+  // projection silently no-ops if the same content is already registered.
+  await semiont.frame.addTagSchema(LEGAL_IRAC_SCHEMA);
 
   let targets: ResourceId[];
   if (explicitResourceId) {
@@ -74,7 +80,7 @@ async function main(): Promise<void> {
       schemaId: SCHEMA_ID,
       categories: CATEGORIES,
     });
-    const n = progress.progress?.createdCount ?? 0;
+    const n = createdCount(progress);
     totalCreated += n;
     console.log(`  ${rId}: ${n} IRAC tags`);
   }

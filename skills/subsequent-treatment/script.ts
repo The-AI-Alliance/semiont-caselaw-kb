@@ -3,80 +3,29 @@
  * classify the treatment, then synthesize a SubsequentTreatment resource
  * summarizing.
  *
- * IMPLEMENTATION SHAPE (current — workaround):
- *   mark.assist with motivation 'linking' and entityTypes carrying the
- *   treatment vocabulary (positive / negative / distinguished / criticized
- *   / overruled / neutral), declared via frame.addEntityTypes upfront. Each
- *   tagged span is a linking annotation whose body carries the chosen value.
+ * Uses the `legal-citation-treatment` tag schema (six categories:
+ * positive / negative / distinguished / criticized / overruled / neutral).
+ * The schema is registered at startup; re-runs are silent at the projection
+ * layer because the content matches.
  *
- * IMPLEMENTATION SHAPE (intended end state):
- *   mark.assist with motivation 'tagging' and schemaId 'legal-citation-treatment',
- *   passing the treatment values as `categories`. Each tagged span is a tagging
- *   annotation with a 'classifying'-purpose body identifying the schema and a
- *   'tagging'-purpose body with the chosen category. Cleaner — no per-skill
- *   frame.addEntityTypes call, instructions text shrinks (the registry's
- *   per-category descriptions and examples carry the same information into
- *   the worker's prompt), and the resulting annotations live on the schema
- *   layer rather than as ad-hoc linking annotations.
- *
- * WHY THE WORKAROUND TODAY:
- *   `legal-citation-treatment` is not yet a registered schema in
- *   packages/ontology/src/tag-schemas.ts (the current registry has only
- *   legal-irac, scientific-imrad, argument-toulmin). Until it lands there,
- *   motivation 'tagging' would throw "Invalid tag schema". Treatment fits
- *   the structural-analysis pattern that registry was built for — fixed
- *   enum, methodology-bound semantics, broadly applicable across legal-
- *   citation analysis — and belongs in the canonical registry rather than
- *   as a per-corpus vocabulary.
- *
- * MIGRATION (when 'legal-citation-treatment' lands upstream):
- *   1. Drop the `await semiont.frame.addEntityTypes(TREATMENT_TAG_SCHEMA)` call.
- *   2. Change the per-citing-case mark.assist call:
- *        from: { entityTypes: TREATMENT_TAGS, instructions: scopedInstructions }
- *              with motivation 'linking'
- *        to:   { schemaId: 'legal-citation-treatment', categories: TREATMENT_TAG_SCHEMA }
- *              with motivation 'tagging'
- *   3. Change the aggregation filter from `motivation === 'linking'` to
- *      `motivation === 'tagging'`.
- *   4. Delete the TREATMENT_INSTRUCTIONS const — the registry's category
- *      descriptions and examples are passed to the worker automatically.
- *   5. Delete this header section; replace with a brief "Uses the
- *      legal-citation-treatment schema" note.
+ * Each treatment classification lands as a `motivation: 'tagging'`
+ * annotation with a `purpose: 'classifying'` body identifying the
+ * schema and a `purpose: 'tagging'` body carrying the chosen category.
  *
  * Usage: tsx skills/subsequent-treatment/script.ts <targetCaseResourceId> [--interactive]
  */
 
 import {
   SemiontClient,
-  entityType,
   resourceId as ridBrand,
   type AnnotationId,
   type ResourceId,
 } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { createdCount } from '../../src/mark-result.js';
+import { LEGAL_CITATION_TREATMENT_SCHEMA } from '../../src/tag-schemas.js';
 
-const TREATMENT_TAG_SCHEMA = (
-  process.env.TREATMENT_TAG_SCHEMA ??
-  'positive,negative,distinguished,criticized,overruled,neutral'
-)
-  .split(',')
-  .map((t) => t.trim())
-  .filter(Boolean);
-
-const TREATMENT_TAGS = TREATMENT_TAG_SCHEMA.map(entityType);
-
-const TREATMENT_INSTRUCTIONS = `
-Classify how this passage treats the cited case. Use exactly one tag from the schema:
-${TREATMENT_TAG_SCHEMA.map((t) => `  - ${t}`).join('\n')}
-Definitions:
-  - positive: the citing case relies on, follows, applies, or extends the cited case
-  - negative: the citing case rejects or disagrees with the cited case (without overruling)
-  - distinguished: the citing case acknowledges but distinguishes the cited case on its facts
-  - criticized: the citing case criticizes the reasoning of the cited case
-  - overruled: the citing case overrules the cited case in part or whole
-  - neutral: a string-cite or background mention with no substantive treatment
-Quote the supporting language and apply the tag at the span where the treatment is established.
-`.trim();
+const TREATMENT_CATEGORIES = LEGAL_CITATION_TREATMENT_SCHEMA.tags.map((t) => t.name);
 
 interface CitingHit {
   citingCaseId: ResourceId;
@@ -162,7 +111,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`Found ${citingHits.length} citing-annotation(s) for "${targetName}".`);
-  console.log(`Treatment vocabulary: ${TREATMENT_TAG_SCHEMA.join(', ')}`);
+  console.log(`Treatment vocabulary: ${TREATMENT_CATEGORIES.join(', ')}`);
   const proceed = await confirm(
     `Run mark.assist (tagging mode) on each citing case to classify treatment?`,
     true,
@@ -184,25 +133,23 @@ async function main(): Promise<void> {
     perCaseAnnotations.get(k)!.push(hit);
   }
 
-  // Make sure the treatment vocabulary is published before the linking pass
-  // attempts to use it. Idempotent — re-runs are harmless.
-  await semiont.frame.addEntityTypes(TREATMENT_TAG_SCHEMA);
+  // Register the treatment schema before the tagging pass. Idempotent —
+  // re-runs are silent at the projection layer.
+  await semiont.frame.addTagSchema(LEGAL_CITATION_TREATMENT_SCHEMA);
 
   for (const citingCaseId of perCaseAnnotations.keys()) {
     const hits = perCaseAnnotations.get(citingCaseId)!;
-    const scopedInstructions =
-      TREATMENT_INSTRUCTIONS +
-      `\n\nFocus only on passages that cite "${targetName}" and classify those passages.`;
     try {
       const progress = await semiont.mark.assist(
         ridBrand(citingCaseId),
-        'linking',
+        'tagging',
         {
-          entityTypes: TREATMENT_TAGS,
-          instructions: scopedInstructions,
+          schemaId: LEGAL_CITATION_TREATMENT_SCHEMA.id,
+          categories: TREATMENT_CATEGORIES,
+          instructions: `Focus only on passages that cite "${targetName}" and classify those passages.`,
         },
       );
-      const n = progress.progress?.createdCount ?? 0;
+      const n = createdCount(progress);
       console.log(`  ${hits[0].citingCaseName}: ${n} treatment tag(s)`);
     } catch (err) {
       console.warn(`  ! ${hits[0].citingCaseName}: ${(err as Error).message}`);
@@ -221,19 +168,20 @@ async function main(): Promise<void> {
   };
   const rows: TreatmentRow[] = [];
   const breakdown = new Map<string, number>();
-  for (const t of TREATMENT_TAG_SCHEMA) breakdown.set(t, 0);
+  for (const t of TREATMENT_CATEGORIES) breakdown.set(t, 0);
 
   for (const [citingCaseId, hits] of perCaseAnnotations) {
     const annotations = await semiont.browse.annotations(ridBrand(citingCaseId));
     const taggedHits: { treatments: string[]; quote: string }[] = [];
     for (const ann of annotations) {
-      // Treatment annotations have motivation 'linking' (vocabulary-classification
-      // shape); inspect the tagging-purpose body for treatment values.
-      if (ann.motivation !== 'linking') continue;
+      // Treatment annotations are now `motivation: 'tagging'` with a
+      // `purpose: 'tagging'` body carrying the treatment value and a
+      // `purpose: 'classifying'` body identifying the schema.
+      if (ann.motivation !== 'tagging') continue;
       const tags = (ann.body ?? [])
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
         .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]))
-        .filter((t: string) => TREATMENT_TAG_SCHEMA.includes(t));
+        .filter((t: string) => TREATMENT_CATEGORIES.includes(t));
       if (tags.length === 0) continue;
       taggedHits.push({
         treatments: tags,
@@ -261,7 +209,7 @@ async function main(): Promise<void> {
     '## Treatment breakdown',
     '',
   ];
-  for (const t of TREATMENT_TAG_SCHEMA) {
+  for (const t of TREATMENT_CATEGORIES) {
     lines.push(`- **${t}:** ${breakdown.get(t) ?? 0}`);
   }
   lines.push('', '## Per-citing-case treatment', '');

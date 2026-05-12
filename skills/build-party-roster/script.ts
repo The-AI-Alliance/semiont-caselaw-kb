@@ -4,18 +4,6 @@
  *
  * Pass: cluster + match + bind / yield.fromAnnotation + bind.
  *
- * KNOWN ISSUE — entity-type loss on synthesized resources:
- *   The yield.fromAnnotation call passes `entityTypes: ['Party',
- *   ...rolesInCluster]`, but @semiont/sdk's GenerationOptions doesn't
- *   declare an entityTypes field (see namespaces/types.ts:GenerationOptions
- *   and the bus payload in yield.ts:188-198). The field is silently dropped —
- *   synthesized Party resources don't get the 'Party' / 'Judge' / etc.
- *   entity-type stamps, so `browse.resources({ entityType: 'Judge' })`
- *   misses them. The bound annotations still carry the role tags, so
- *   annotation-side queries work. Upstream fix: add `entityTypes` to
- *   the SDK's GenerationOptions and thread it through the bus payload
- *   to the worker (which already accepts it via GenerationParams).
- *
  * Usage: tsx skills/build-party-roster/script.ts [--interactive]
  */
 
@@ -161,7 +149,7 @@ async function main(): Promise<void> {
     const sample = anns[0];
     const rolesInCluster = Array.from(new Set(anns.flatMap((a) => a.roles)));
 
-    const gather = await semiont.gather.annotation(sample.annId, sample.rId, {
+    const gather = await semiont.gather.annotation(sample.rId, sample.annId, {
       contextWindow: 1500,
     });
     const context = gather.response as GatheredContext;
