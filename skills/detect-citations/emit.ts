@@ -27,6 +27,18 @@ interface DetectedCitation {
   type: string;
 }
 
+// Map eyecite's internal type names to our domain vocabulary at the seam
+// where eyecite output enters Semiont. Anything not in the map flows through
+// as-is. Add a row here when a new eyecite type needs a domain alias.
+const EYECITE_TO_DOMAIN_TAG: Record<string, string> = {
+  FullLawCitation: 'StatutoryCitation',
+  FullJournalCitation: 'JournalCitation',
+};
+
+function domainTag(eyeciteType: string): string {
+  return EYECITE_TO_DOMAIN_TAG[eyeciteType] ?? eyeciteType;
+}
+
 function summarizeByType(cs: DetectedCitation[]): string {
   const counts = new Map<string, number>();
   for (const c of cs) counts.set(c.type, (counts.get(c.type) ?? 0) + 1);
@@ -93,7 +105,7 @@ async function main(): Promise<void> {
           motivation: 'linking',
           body: [
             { type: 'TextualBody', purpose: 'tagging', value: 'Citation' },
-            { type: 'TextualBody', purpose: 'tagging', value: c.type },
+            { type: 'TextualBody', purpose: 'tagging', value: domainTag(c.type) },
           ],
         });
         totalCreated++;
