@@ -5,7 +5,7 @@
  * Usage: tsx skills/build-citation-graph/script.ts [<caseResourceId>] [--interactive]
  */
 
-import { SemiontClient, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
 function getMediaType(r: any): string | undefined {
@@ -32,11 +32,18 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2).filter((a) => !a.startsWith('-'));
   const explicitResourceId = args[0];
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'caselaw-build-citation-graph',
+    label: 'caselaw build-citation-graph',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   const all = await semiont.browse.resources({ limit: 1000 });
   const caseIndex = new Map<string, CaseInfo>();
@@ -53,7 +60,7 @@ async function main(): Promise<void> {
 
   if (caseIndex.size === 0) {
     console.log('No Case resources found.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -62,7 +69,7 @@ async function main(): Promise<void> {
   if (explicitResourceId) {
     if (!caseIndex.has(explicitResourceId)) {
       console.error(`Resource ${explicitResourceId} is not a Case in this KB.`);
-      semiont.dispose();
+      await session.dispose();
       closeInteractive();
       return;
     }
@@ -116,7 +123,7 @@ async function main(): Promise<void> {
   const proceed = await confirm('Proceed?', true);
   if (!proceed) {
     console.log('Aborted.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -199,7 +206,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`\nDone. ${created} PrecedentGraph resource(s) synthesized.`);
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

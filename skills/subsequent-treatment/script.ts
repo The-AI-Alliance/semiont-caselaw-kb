@@ -16,7 +16,9 @@
  */
 
 import {
-  SemiontClient,
+  SemiontSession,
+  InMemorySessionStorage,
+  type KnowledgeBase,
   resourceId as ridBrand,
   type AnnotationId,
   type ResourceId,
@@ -56,11 +58,18 @@ async function main(): Promise<void> {
   }
   const targetId = ridBrand(targetIdArg);
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'caselaw-subsequent-treatment',
+    label: 'caselaw subsequent-treatment',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   const all = await semiont.browse.resources({ limit: 1000 });
   const cases = all.filter((r) => {
@@ -72,7 +81,7 @@ async function main(): Promise<void> {
   const target = all.find((r) => r['@id'] === targetIdArg);
   if (!target) {
     console.error(`Target ${targetIdArg} not found in the KB.`);
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -117,7 +126,7 @@ async function main(): Promise<void> {
 
   if (citingHits.length === 0) {
     console.log(`No citing cases found for ${targetName} in this corpus.`);
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -130,7 +139,7 @@ async function main(): Promise<void> {
   );
   if (!proceed) {
     console.log('Aborted.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -281,7 +290,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`\nDone. SubsequentTreatment resource: ${treatmentId} (${body.length} bytes).`);
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

@@ -16,7 +16,7 @@
  * Usage: tsx skills/detect-citations/fetch.ts <outDir> [<resourceId>]
  */
 
-import { SemiontClient, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -38,11 +38,18 @@ async function main(): Promise<void> {
 
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'caselaw-detect-citations-fetch',
+    label: 'caselaw detect-citations-fetch',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   let targets: ResourceId[];
   if (explicitResourceId) {
@@ -60,7 +67,7 @@ async function main(): Promise<void> {
 
   if (targets.length === 0) {
     console.log('No Case resources found. Run skills/ingest-cases/script.ts first.');
-    semiont.dispose();
+    await session.dispose();
     return;
   }
 
@@ -76,7 +83,7 @@ async function main(): Promise<void> {
     }
   }
 
-  semiont.dispose();
+  await session.dispose();
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

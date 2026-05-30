@@ -10,7 +10,7 @@
  * Usage: tsx skills/detect-citations/emit.ts <inDir>
  */
 
-import { SemiontClient, resourceId as ridBrand } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand } from '@semiont/sdk';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
@@ -61,11 +61,18 @@ async function main(): Promise<void> {
     return;
   }
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'caselaw-detect-citations-emit',
+    label: 'caselaw detect-citations-emit',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   let totalCreated = 0;
   let totalFailed = 0;
@@ -119,7 +126,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`\nDone. Created ${totalCreated} citation annotation(s) (${totalFailed} failed).`);
-  semiont.dispose();
+  await session.dispose();
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

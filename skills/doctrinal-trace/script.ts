@@ -9,7 +9,7 @@
  * Usage: tsx skills/doctrinal-trace/script.ts ["<doctrine query>"] [--interactive]
  */
 
-import { SemiontClient, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 30);
@@ -51,11 +51,18 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'caselaw-doctrinal-trace',
+    label: 'caselaw doctrinal-trace',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   const all = await semiont.browse.resources({ limit: 1000 });
   const cases = all.filter((r) => {
@@ -65,7 +72,7 @@ async function main(): Promise<void> {
   });
   if (cases.length === 0) {
     console.log('No Case resources found.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -115,7 +122,7 @@ async function main(): Promise<void> {
   const proceed = await confirm('Proceed with these candidates?', true);
   if (!proceed) {
     console.log('Aborted.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -304,7 +311,7 @@ async function main(): Promise<void> {
   const proceedYield = await confirm('Yield this DoctrinalTrace resource?', true);
   if (!proceedYield) {
     console.log('Aborted before yield.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -318,7 +325,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`\nDone. DoctrinalTrace resource: ${traceId} (${body.length} bytes).`);
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

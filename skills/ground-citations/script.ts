@@ -6,7 +6,9 @@
  */
 
 import {
-  SemiontClient,
+  SemiontSession,
+  InMemorySessionStorage,
+  type KnowledgeBase,
   resourceId as ridBrand,
   type AnnotationId,
   type GatheredContext,
@@ -62,11 +64,18 @@ function buildStubBody(c: CourtListenerCase, citationText: string): string {
 }
 
 async function main(): Promise<void> {
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'caselaw-ground-citations',
+    label: 'caselaw ground-citations',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   const all = await semiont.browse.resources({ limit: 1000 });
   const cases = all.filter((r) => {
@@ -77,7 +86,7 @@ async function main(): Promise<void> {
 
   if (cases.length === 0) {
     console.log('No Case resources found.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -138,7 +147,7 @@ async function main(): Promise<void> {
       `No unbound reporter citations to resolve. (${alreadyBound} already bound; ` +
         `${statutoryCount} statutory — route to skills/extract-statutory-refs.)`,
     );
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -155,7 +164,7 @@ async function main(): Promise<void> {
   const proceed = await confirm('Proceed?', true);
   if (!proceed) {
     console.log('Aborted.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -274,7 +283,7 @@ async function main(): Promise<void> {
     `\nDone. Bound ${boundLocal} locally + ${boundRemote} via CourtListener stub; ` +
       `${unresolved} unresolved. Remote calls used: ${remoteCallsUsed}.`,
   );
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 
