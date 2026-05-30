@@ -1,5 +1,9 @@
 # Caselaw Knowledge Base
 
+[![Lint](https://github.com/The-AI-Alliance/semiont-caselaw-kb/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/The-AI-Alliance/semiont-caselaw-kb/actions/workflows/lint.yml?query=branch%3Amain)
+[![Build](https://github.com/The-AI-Alliance/semiont-caselaw-kb/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/The-AI-Alliance/semiont-caselaw-kb/actions/workflows/build.yml?query=branch%3Amain)
+[![License](https://img.shields.io/github/license/The-AI-Alliance/semiont-caselaw-kb)](https://github.com/The-AI-Alliance/semiont-caselaw-kb/blob/main/LICENSE)
+
 Real United States case law — Supreme Court opinions and state appellate cases — formatted for citation tracking, annotation, and legal knowledge extraction with [Semiont](https://github.com/The-AI-Alliance/semiont).
 
 ## About This Dataset
