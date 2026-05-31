@@ -51,39 +51,40 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  let targets: ResourceId[];
-  if (explicitResourceId) {
-    targets = [ridBrand(explicitResourceId)];
-  } else {
-    const all = await semiont.browse.resources({ limit: 1000 });
-    targets = all
-      .filter((r) => {
-        const isCase = (r.entityTypes ?? []).some((t) => t === 'Case');
-        const mt = getMediaType(r);
-        return isCase && (mt === 'text/markdown' || mt === 'text/plain');
-      })
-      .map((r) => ridBrand(r['@id']));
-  }
-
-  if (targets.length === 0) {
-    console.log('No Case resources found. Run skills/ingest-cases/script.ts first.');
-    await session.dispose();
-    return;
-  }
-
-  console.log(`Fetching ${targets.length} case bod${targets.length === 1 ? 'y' : 'ies'} into ${outDir}/`);
-  for (const rId of targets) {
-    try {
-      const body = await semiont.browse.resourceContent(rId);
-      const path = join(outDir, `${rId}.body`);
-      writeFileSync(path, body, 'utf-8');
-      console.log(`  ${rId}: ${body.length} bytes`);
-    } catch (err) {
-      console.warn(`  ! ${rId}: failed to fetch body: ${(err as Error).message}`);
+  try {
+    let targets: ResourceId[];
+    if (explicitResourceId) {
+      targets = [ridBrand(explicitResourceId)];
+    } else {
+      const all = await semiont.browse.resources({ limit: 1000 });
+      targets = all
+        .filter((r) => {
+          const isCase = (r.entityTypes ?? []).some((t) => t === 'Case');
+          const mt = getMediaType(r);
+          return isCase && (mt === 'text/markdown' || mt === 'text/plain');
+        })
+        .map((r) => ridBrand(r['@id']));
     }
-  }
 
-  await session.dispose();
+    if (targets.length === 0) {
+      console.log('No Case resources found. Run skills/ingest-cases/script.ts first.');
+      return;
+    }
+
+    console.log(`Fetching ${targets.length} case bod${targets.length === 1 ? 'y' : 'ies'} into ${outDir}/`);
+    for (const rId of targets) {
+      try {
+        const body = await semiont.browse.resourceContent(rId);
+        const path = join(outDir, `${rId}.body`);
+        writeFileSync(path, body, 'utf-8');
+        console.log(`  ${rId}: ${body.length} bytes`);
+      } catch (err) {
+        console.warn(`  ! ${rId}: failed to fetch body: ${(err as Error).message}`);
+      }
+    }
+  } finally {
+    await session.dispose();
+  }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

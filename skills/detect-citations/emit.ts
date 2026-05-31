@@ -74,59 +74,62 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  let totalCreated = 0;
-  let totalFailed = 0;
+  try {
+    let totalCreated = 0;
+    let totalFailed = 0;
 
-  for (const f of files) {
-    const rIdStr = basename(f, '.citations.json');
-    const rId = ridBrand(rIdStr);
-    const raw = readFileSync(join(inDir, f), 'utf-8');
-    const { citations } = JSON.parse(raw) as { citations: DetectedCitation[] };
+    for (const f of files) {
+      const rIdStr = basename(f, '.citations.json');
+      const rId = ridBrand(rIdStr);
+      const raw = readFileSync(join(inDir, f), 'utf-8');
+      const { citations } = JSON.parse(raw) as { citations: DetectedCitation[] };
 
-    if (citations.length === 0) {
-      console.log(`  ${rIdStr}: 0 citations`);
-      continue;
-    }
+      if (citations.length === 0) {
+        console.log(`  ${rIdStr}: 0 citations`);
+        continue;
+      }
 
-    // Load the matching body to populate TextQuoteSelector.prefix/.suffix.
-    // Without these, annotation cards in the UI render with no visible
-    // text — the body's `exact` carries the citation itself, prefix/suffix
-    // give the surrounding context.
-    const bodyPath = join(inDir, `${rIdStr}.body`);
-    const body = existsSync(bodyPath) ? readFileSync(bodyPath, 'utf-8') : null;
+      // Load the matching body to populate TextQuoteSelector.prefix/.suffix.
+      // Without these, annotation cards in the UI render with no visible
+      // text — the body's `exact` carries the citation itself, prefix/suffix
+      // give the surrounding context.
+      const bodyPath = join(inDir, `${rIdStr}.body`);
+      const body = existsSync(bodyPath) ? readFileSync(bodyPath, 'utf-8') : null;
 
-    console.log(`  ${rIdStr}: ${citations.length} citation(s) — ${summarizeByType(citations)}`);
+      console.log(`  ${rIdStr}: ${citations.length} citation(s) — ${summarizeByType(citations)}`);
 
-    for (const c of citations) {
-      const prefix = body ? body.slice(Math.max(0, c.start - CONTEXT_WINDOW), c.start) : '';
-      const suffix = body ? body.slice(c.end, c.end + CONTEXT_WINDOW) : '';
-      try {
-        await semiont.mark.annotation({
-          target: {
-            source: rId,
-            selector: [
-              { type: 'TextPositionSelector', start: c.start, end: c.end },
-              { type: 'TextQuoteSelector', exact: c.text, prefix, suffix },
+      for (const c of citations) {
+        const prefix = body ? body.slice(Math.max(0, c.start - CONTEXT_WINDOW), c.start) : '';
+        const suffix = body ? body.slice(c.end, c.end + CONTEXT_WINDOW) : '';
+        try {
+          await semiont.mark.annotation({
+            target: {
+              source: rId,
+              selector: [
+                { type: 'TextPositionSelector', start: c.start, end: c.end },
+                { type: 'TextQuoteSelector', exact: c.text, prefix, suffix },
+              ],
+            },
+            motivation: 'linking',
+            body: [
+              { type: 'TextualBody', purpose: 'tagging', value: 'Citation' },
+              { type: 'TextualBody', purpose: 'tagging', value: domainTag(c.type) },
             ],
-          },
-          motivation: 'linking',
-          body: [
-            { type: 'TextualBody', purpose: 'tagging', value: 'Citation' },
-            { type: 'TextualBody', purpose: 'tagging', value: domainTag(c.type) },
-          ],
-        });
-        totalCreated++;
-      } catch (err) {
-        totalFailed++;
-        console.warn(
-          `    ! failed ${c.start}-${c.end} ("${c.text.slice(0, 40)}…"): ${(err as Error).message}`,
-        );
+          });
+          totalCreated++;
+        } catch (err) {
+          totalFailed++;
+          console.warn(
+            `    ! failed ${c.start}-${c.end} ("${c.text.slice(0, 40)}…"): ${(err as Error).message}`,
+          );
+        }
       }
     }
-  }
 
-  console.log(`\nDone. Created ${totalCreated} citation annotation(s) (${totalFailed} failed).`);
-  await session.dispose();
+    console.log(`\nDone. Created ${totalCreated} citation annotation(s) (${totalFailed} failed).`);
+  } finally {
+    await session.dispose();
+  }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

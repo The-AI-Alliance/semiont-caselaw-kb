@@ -77,214 +77,214 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  const all = await semiont.browse.resources({ limit: 1000 });
-  const cases = all.filter((r) => {
-    const isCase = (r.entityTypes ?? []).some((t) => t === 'Case');
-    const mt = getMediaType(r);
-    return isCase && (mt === 'text/markdown' || mt === 'text/plain');
-  });
+  try {
+    const all = await semiont.browse.resources({ limit: 1000 });
+    const cases = all.filter((r) => {
+      const isCase = (r.entityTypes ?? []).some((t) => t === 'Case');
+      const mt = getMediaType(r);
+      return isCase && (mt === 'text/markdown' || mt === 'text/plain');
+    });
 
-  if (cases.length === 0) {
-    console.log('No Case resources found.');
-    await session.dispose();
-    closeInteractive();
-    return;
-  }
+    if (cases.length === 0) {
+      console.log('No Case resources found.');
+      closeInteractive();
+      return;
+    }
 
-  // Gather all unbound citation annotations across the corpus, separating
-  // statutory citations (which route to skill 8 instead).
-  const reporterCitations: CitationAnno[] = [];
-  let statutoryCount = 0;
-  let alreadyBound = 0;
+    // Gather all unbound citation annotations across the corpus, separating
+    // statutory citations (which route to skill 8 instead).
+    const reporterCitations: CitationAnno[] = [];
+    let statutoryCount = 0;
+    let alreadyBound = 0;
 
-  for (const r of cases) {
-    const rId = ridBrand(r['@id']);
-    const annotations = await semiont.browse.annotations(rId);
-    for (const ann of annotations) {
-      if (ann.motivation !== 'linking') continue;
-      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-      const tags = bodies
-        .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-        .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
-      if (!tags.includes('Citation')) continue;
-      if (tags.includes('StatutoryCitation')) {
-        statutoryCount++;
-        continue;
+    for (const r of cases) {
+      const rId = ridBrand(r['@id']);
+      const annotations = await semiont.browse.annotations(rId);
+      for (const ann of annotations) {
+        if (ann.motivation !== 'linking') continue;
+        const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+        const tags = bodies
+          .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
+          .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
+        if (!tags.includes('Citation')) continue;
+        if (tags.includes('StatutoryCitation')) {
+          statutoryCount++;
+          continue;
+        }
+        const isBound = bodies.some(
+          (b: any) => b.type === 'SpecificResource' && b.purpose === 'linking',
+        );
+        if (isBound) {
+          alreadyBound++;
+          continue;
+        }
+        // The citation type is whatever non-`Citation` tag eyecite stamped — pick
+        // the most specific one for logging.
+        const citationType =
+          tags.find((t: string) => t !== 'Citation') ?? 'UnspecifiedCitation';
+        const target = ann.target;
+        const selectors =
+          typeof target === 'string' || !target.selector
+            ? []
+            : Array.isArray(target.selector)
+              ? target.selector
+              : [target.selector];
+        let text = '';
+        for (const s of selectors) {
+          if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
+        }
+        reporterCitations.push({
+          rId,
+          annId: ann.id,
+          text,
+          citationType,
+        });
       }
-      const isBound = bodies.some(
-        (b: any) => b.type === 'SpecificResource' && b.purpose === 'linking',
+    }
+
+    if (reporterCitations.length === 0) {
+      console.log(
+        `No unbound reporter citations to resolve. (${alreadyBound} already bound; ` +
+          `${statutoryCount} statutory — route to skills/extract-statutory-refs.)`,
       );
-      if (isBound) {
-        alreadyBound++;
-        continue;
-      }
-      // The citation type is whatever non-`Citation` tag eyecite stamped — pick
-      // the most specific one for logging.
-      const citationType =
-        tags.find((t: string) => t !== 'Citation') ?? 'UnspecifiedCitation';
-      const target = ann.target;
-      const selectors =
-        typeof target === 'string' || !target.selector
-          ? []
-          : Array.isArray(target.selector)
-            ? target.selector
-            : [target.selector];
-      let text = '';
-      for (const s of selectors) {
-        if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
-      }
-      reporterCitations.push({
-        rId,
-        annId: ann.id,
-        text,
-        citationType,
-      });
+      closeInteractive();
+      return;
     }
-  }
 
-  if (reporterCitations.length === 0) {
     console.log(
-      `No unbound reporter citations to resolve. (${alreadyBound} already bound; ` +
-        `${statutoryCount} statutory — route to skills/extract-statutory-refs.)`,
+      `Found ${reporterCitations.length} unbound reporter citation(s). ` +
+        `(${alreadyBound} already bound; ${statutoryCount} statutory deferred to skill 8.)`,
     );
-    await session.dispose();
-    closeInteractive();
-    return;
-  }
+    console.log(
+      `Strategy: local match first (threshold ${MATCH_THRESHOLD}), then CourtListener lookup ` +
+        `(cap ${MAX_REMOTE_LOOKUPS}, skip-remote=${SKIP_REMOTE}).`,
+    );
 
-  console.log(
-    `Found ${reporterCitations.length} unbound reporter citation(s). ` +
-      `(${alreadyBound} already bound; ${statutoryCount} statutory deferred to skill 8.)`,
-  );
-  console.log(
-    `Strategy: local match first (threshold ${MATCH_THRESHOLD}), then CourtListener lookup ` +
-      `(cap ${MAX_REMOTE_LOOKUPS}, skip-remote=${SKIP_REMOTE}).`,
-  );
+    const proceed = await confirm('Proceed?', true);
+    if (!proceed) {
+      console.log('Aborted.');
+      closeInteractive();
+      return;
+    }
 
-  const proceed = await confirm('Proceed?', true);
-  if (!proceed) {
-    console.log('Aborted.');
-    await session.dispose();
-    closeInteractive();
-    return;
-  }
+    let boundLocal = 0;
+    let boundRemote = 0;
+    let unresolved = 0;
+    let remoteCallsUsed = 0;
 
-  let boundLocal = 0;
-  let boundRemote = 0;
-  let unresolved = 0;
-  let remoteCallsUsed = 0;
+    for (const a of reporterCitations) {
+      const gather = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
+      if (!('response' in gather)) continue;
+      const context = gather.response as GatheredContext;
+      const matchResult = await semiont.match.search(a.rId, a.annId, context, {
+        limit: 5,
+        useSemanticScoring: true,
+      });
+      const candidates = matchResult.response.map((c: any) => ({
+        name: c.name as string,
+        score: (c.score ?? 0) as number,
+        id: c['@id'] as string,
+      }));
+      const top = candidates[0];
 
-  for (const a of reporterCitations) {
-    const gather = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
-    if (!('response' in gather)) continue;
-    const context = gather.response as GatheredContext;
-    const matchResult = await semiont.match.search(a.rId, a.annId, context, {
-      limit: 5,
-      useSemanticScoring: true,
-    });
-    const candidates = matchResult.response.map((c: any) => ({
-      name: c.name as string,
-      score: (c.score ?? 0) as number,
-      id: c['@id'] as string,
-    }));
-    const top = candidates[0];
-
-    if (top && top.score >= MATCH_THRESHOLD) {
-      const proceedBind = isInteractive()
-        ? await confirm(`"${a.text}" → ${top.name} (score ${top.score}). Bind?`, true)
-        : true;
-      if (!proceedBind) {
-        unresolved++;
+      if (top && top.score >= MATCH_THRESHOLD) {
+        const proceedBind = isInteractive()
+          ? await confirm(`"${a.text}" → ${top.name} (score ${top.score}). Bind?`, true)
+          : true;
+        if (!proceedBind) {
+          unresolved++;
+          continue;
+        }
+        await semiont.bind.body(a.rId, a.annId, [
+          {
+            op: 'add',
+            item: { type: 'SpecificResource', source: top.id, purpose: 'linking' },
+          },
+        ]);
+        boundLocal++;
+        console.log(`  local       "${a.text}" → ${top.name}`);
         continue;
       }
-      await semiont.bind.body(a.rId, a.annId, [
-        {
-          op: 'add',
-          item: { type: 'SpecificResource', source: top.id, purpose: 'linking' },
-        },
-      ]);
-      boundLocal++;
-      console.log(`  local       "${a.text}" → ${top.name}`);
-      continue;
-    }
 
-    if (SKIP_REMOTE || remoteCallsUsed >= MAX_REMOTE_LOOKUPS) {
-      unresolved++;
-      const reason = SKIP_REMOTE ? 'skip-remote' : 'remote cap reached';
-      await semiont.bind.body(a.rId, a.annId, [
-        {
-          op: 'add',
-          item: {
-            type: 'TextualBody',
-            purpose: 'commenting',
-            value: `Could not resolve citation locally; ${reason}.`,
+      if (SKIP_REMOTE || remoteCallsUsed >= MAX_REMOTE_LOOKUPS) {
+        unresolved++;
+        const reason = SKIP_REMOTE ? 'skip-remote' : 'remote cap reached';
+        await semiont.bind.body(a.rId, a.annId, [
+          {
+            op: 'add',
+            item: {
+              type: 'TextualBody',
+              purpose: 'commenting',
+              value: `Could not resolve citation locally; ${reason}.`,
+            },
           },
-        },
-      ]);
-      console.log(`  unresolved  "${a.text}" (${reason})`);
-      continue;
-    }
+        ]);
+        console.log(`  unresolved  "${a.text}" (${reason})`);
+        continue;
+      }
 
-    let remote: CourtListenerCase | null = null;
-    try {
-      remote = await citationLookup(a.text);
-      remoteCallsUsed++;
-    } catch (err) {
-      unresolved++;
+      let remote: CourtListenerCase | null = null;
+      try {
+        remote = await citationLookup(a.text);
+        remoteCallsUsed++;
+      } catch (err) {
+        unresolved++;
+        await semiont.bind.body(a.rId, a.annId, [
+          {
+            op: 'add',
+            item: {
+              type: 'TextualBody',
+              purpose: 'commenting',
+              value: `CourtListener lookup failed: ${(err as Error).message}.`,
+            },
+          },
+        ]);
+        console.log(`  error       "${a.text}" — ${(err as Error).message}`);
+        continue;
+      }
+
+      if (!remote) {
+        unresolved++;
+        await semiont.bind.body(a.rId, a.annId, [
+          {
+            op: 'add',
+            item: {
+              type: 'TextualBody',
+              purpose: 'commenting',
+              value: 'No local match; CourtListener returned no results.',
+            },
+          },
+        ]);
+        console.log(`  unresolved  "${a.text}" (no CourtListener match)`);
+        continue;
+      }
+
+      const body = buildStubBody(remote, a.text);
+      const { resourceId: stubId } = await semiont.yield.resource({
+        name: remote.caseName,
+        file: Buffer.from(body, 'utf-8'),
+        format: 'text/markdown',
+        entityTypes: ['Case', 'JudicialOpinion', 'CourtListenerStub'],
+        storageUri: `file://generated/case-stub-${slugify(remote.caseName)}-${remote.clusterId ?? 'na'}.md`,
+      });
       await semiont.bind.body(a.rId, a.annId, [
         {
           op: 'add',
-          item: {
-            type: 'TextualBody',
-            purpose: 'commenting',
-            value: `CourtListener lookup failed: ${(err as Error).message}.`,
-          },
+          item: { type: 'SpecificResource', source: stubId, purpose: 'linking' },
         },
       ]);
-      console.log(`  error       "${a.text}" — ${(err as Error).message}`);
-      continue;
+      boundRemote++;
+      console.log(`  remote      "${a.text}" → ${remote.caseName} (${stubId})`);
     }
 
-    if (!remote) {
-      unresolved++;
-      await semiont.bind.body(a.rId, a.annId, [
-        {
-          op: 'add',
-          item: {
-            type: 'TextualBody',
-            purpose: 'commenting',
-            value: 'No local match; CourtListener returned no results.',
-          },
-        },
-      ]);
-      console.log(`  unresolved  "${a.text}" (no CourtListener match)`);
-      continue;
-    }
-
-    const body = buildStubBody(remote, a.text);
-    const { resourceId: stubId } = await semiont.yield.resource({
-      name: remote.caseName,
-      file: Buffer.from(body, 'utf-8'),
-      format: 'text/markdown',
-      entityTypes: ['Case', 'JudicialOpinion', 'CourtListenerStub'],
-      storageUri: `file://generated/case-stub-${slugify(remote.caseName)}-${remote.clusterId ?? 'na'}.md`,
-    });
-    await semiont.bind.body(a.rId, a.annId, [
-      {
-        op: 'add',
-        item: { type: 'SpecificResource', source: stubId, purpose: 'linking' },
-      },
-    ]);
-    boundRemote++;
-    console.log(`  remote      "${a.text}" → ${remote.caseName} (${stubId})`);
+    console.log(
+      `\nDone. Bound ${boundLocal} locally + ${boundRemote} via CourtListener stub; ` +
+        `${unresolved} unresolved. Remote calls used: ${remoteCallsUsed}.`,
+    );
+    closeInteractive();
+  } finally {
+    await session.dispose();
   }
-
-  console.log(
-    `\nDone. Bound ${boundLocal} locally + ${boundRemote} via CourtListener stub; ` +
-      `${unresolved} unresolved. Remote calls used: ${remoteCallsUsed}.`,
-  );
-  await session.dispose();
-  closeInteractive();
 }
 
 main().catch((e) => {

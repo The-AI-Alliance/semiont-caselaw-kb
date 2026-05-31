@@ -242,41 +242,44 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  // Declare this KB's entity-type vocabulary via frame. Idempotent.
-  console.log(`Declaring ${KB_ENTITY_TYPES.length} entity types via frame...`);
-  await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
+  try {
+    // Declare this KB's entity-type vocabulary via frame. Idempotent.
+    console.log(`Declaring ${KB_ENTITY_TYPES.length} entity types via frame...`);
+    await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
 
-  let created = 0;
-  let failed = 0;
-  for (const { corpus, documents } of fetched) {
-    const entityTypes = entityTypesFromConfig(corpus.config.handler, corpus.config.entityTypes);
-    const isMarkdown = corpus.config.handler === 'cornell-lii';
-    const format = isMarkdown ? 'text/markdown' : 'text/plain';
-    for (let i = 0; i < documents.length; i++) {
-      const doc = documents[i];
-      if (!doc) continue;
-      const safeName = doc.title.replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 80);
-      const storageUri = `file://${corpus.subdir}/case-${i + 1}-${safeName}.${isMarkdown ? 'md' : 'txt'}`;
-      try {
-        const { resourceId } = await semiont.yield.resource({
-          name: doc.title,
-          file: Buffer.from(doc.content, 'utf-8'),
-          format,
-          entityTypes,
-          storageUri,
-        });
-        created++;
-        console.log(`  + ${corpus.subdir}/${doc.title} → ${resourceId}`);
-      } catch (e) {
-        failed++;
-        console.warn(`  ! ${corpus.subdir}/${doc.title} failed: ${(e as Error).message}`);
+    let created = 0;
+    let failed = 0;
+    for (const { corpus, documents } of fetched) {
+      const entityTypes = entityTypesFromConfig(corpus.config.handler, corpus.config.entityTypes);
+      const isMarkdown = corpus.config.handler === 'cornell-lii';
+      const format = isMarkdown ? 'text/markdown' : 'text/plain';
+      for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i];
+        if (!doc) continue;
+        const safeName = doc.title.replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 80);
+        const storageUri = `file://${corpus.subdir}/case-${i + 1}-${safeName}.${isMarkdown ? 'md' : 'txt'}`;
+        try {
+          const { resourceId } = await semiont.yield.resource({
+            name: doc.title,
+            file: Buffer.from(doc.content, 'utf-8'),
+            format,
+            entityTypes,
+            storageUri,
+          });
+          created++;
+          console.log(`  + ${corpus.subdir}/${doc.title} → ${resourceId}`);
+        } catch (e) {
+          failed++;
+          console.warn(`  ! ${corpus.subdir}/${doc.title} failed: ${(e as Error).message}`);
+        }
       }
     }
-  }
 
-  console.log(`\nDone. ${created} resources created, ${failed} failed.`);
-  await session.dispose();
-  closeInteractive();
+    console.log(`\nDone. ${created} resources created, ${failed} failed.`);
+    closeInteractive();
+  } finally {
+    await session.dispose();
+  }
 }
 
 main().catch((e) => {

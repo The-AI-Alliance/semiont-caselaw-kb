@@ -44,57 +44,58 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  // Register the schema before any mark.assist call. Idempotent — the
-  // projection silently no-ops if the same content is already registered.
-  await semiont.frame.addTagSchema(LEGAL_IRAC_SCHEMA);
+  try {
+    // Register the schema before any mark.assist call. Idempotent — the
+    // projection silently no-ops if the same content is already registered.
+    await semiont.frame.addTagSchema(LEGAL_IRAC_SCHEMA);
 
-  let targets: ResourceId[];
-  if (explicitResourceId) {
-    targets = [ridBrand(explicitResourceId)];
-  } else {
-    const all = await semiont.browse.resources({ limit: 1000 });
-    targets = all
-      .filter((r) => {
-        const isCase = (r.entityTypes ?? []).some((t) => t === 'Case');
-        const mt = getMediaType(r);
-        return isCase && (mt === 'text/markdown' || mt === 'text/plain');
-      })
-      .map((r) => ridBrand(r['@id']));
-  }
+    let targets: ResourceId[];
+    if (explicitResourceId) {
+      targets = [ridBrand(explicitResourceId)];
+    } else {
+      const all = await semiont.browse.resources({ limit: 1000 });
+      targets = all
+        .filter((r) => {
+          const isCase = (r.entityTypes ?? []).some((t) => t === 'Case');
+          const mt = getMediaType(r);
+          return isCase && (mt === 'text/markdown' || mt === 'text/plain');
+        })
+        .map((r) => ridBrand(r['@id']));
+    }
 
-  if (targets.length === 0) {
-    console.log('No Case resources found.');
-    await session.dispose();
+    if (targets.length === 0) {
+      console.log('No Case resources found.');
+      closeInteractive();
+      return;
+    }
+
+    console.log(
+      `Will run mark.assist (motivation: tagging, schemaId: ${SCHEMA_ID}, ` +
+        `categories: ${CATEGORIES.join(', ')}) against ${targets.length} case(s).`,
+    );
+    const proceed = await confirm('Proceed?', true);
+    if (!proceed) {
+      console.log('Aborted.');
+      closeInteractive();
+      return;
+    }
+
+    let totalCreated = 0;
+    for (const rId of targets) {
+      const progress = await semiont.mark.assist(rId, 'tagging', {
+        schemaId: SCHEMA_ID,
+        categories: CATEGORIES,
+      });
+      const n = createdCount(progress);
+      totalCreated += n;
+      console.log(`  ${rId}: ${n} IRAC tags`);
+    }
+
+    console.log(`\nDone. Created ${totalCreated} IRAC-tagged annotations.`);
     closeInteractive();
-    return;
-  }
-
-  console.log(
-    `Will run mark.assist (motivation: tagging, schemaId: ${SCHEMA_ID}, ` +
-      `categories: ${CATEGORIES.join(', ')}) against ${targets.length} case(s).`,
-  );
-  const proceed = await confirm('Proceed?', true);
-  if (!proceed) {
-    console.log('Aborted.');
+  } finally {
     await session.dispose();
-    closeInteractive();
-    return;
   }
-
-  let totalCreated = 0;
-  for (const rId of targets) {
-    const progress = await semiont.mark.assist(rId, 'tagging', {
-      schemaId: SCHEMA_ID,
-      categories: CATEGORIES,
-    });
-    const n = createdCount(progress);
-    totalCreated += n;
-    console.log(`  ${rId}: ${n} IRAC tags`);
-  }
-
-  console.log(`\nDone. Created ${totalCreated} IRAC-tagged annotations.`);
-  await session.dispose();
-  closeInteractive();
 }
 
 main().catch((e) => {
