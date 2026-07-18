@@ -39,7 +39,7 @@ IMAGE="${EYECITE_IMAGE_TAG:-semiont-eyecite:latest}"
 CACHE_DIR=".cache/citation-detection"
 
 # HOST_ADDR for the inner Node containers to reach the host's Semiont
-# backend. Same trick start.sh uses.
+# backend. Same trick `semiont start` uses.
 HOST_ADDR=$(${RUNTIME} run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
 SEMIONT_API_URL="${SEMIONT_API_URL:-http://${HOST_ADDR}:4000}"
 SEMIONT_USER_EMAIL="${SEMIONT_USER_EMAIL:-admin@example.com}"
@@ -72,7 +72,7 @@ for body in "${bodies[@]}"; do
   out="${body%.body}.citations.json"
   cat "${body}" | ${RUNTIME} run --rm -i "${IMAGE}" > "${out}"
   n=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))['citations']))" "${out}")
-  echo "  $(basename ${body} .body): ${n} citation(s)"
+  echo "  $(basename "${body}" .body): ${n} citation(s)"
 done
 
 echo ""
