@@ -11,6 +11,7 @@
 import { SemiontSession, InMemorySessionStorage, type KbTarget, entityType, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -19,14 +20,6 @@ const ENTITY_TYPES = (
   .split(',')
   .map((t) => entityType(t.trim()));
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2).filter((a) => !a.startsWith('-'));
