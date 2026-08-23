@@ -26,7 +26,7 @@ If you're an AI assistant working in this repo, this file is your orientation. T
 | [`ground-citations`](skills/ground-citations/) | Resolve every citation to a local case or fetch from CourtListener | `+ gather.annotation`, `match.search`, `bind.body`, `yield.resource` |
 | [`build-citation-graph`](skills/build-citation-graph/) | Synthesize a PrecedentGraph resource per case (cited-by, citing-of) | `+ yield.resource` per case |
 | [`extract-statutory-refs`](skills/extract-statutory-refs/) | Resolve statutory citations to Statute resources fetched from US Code | `yield.resource`, `bind.body` |
-| [`build-party-roster`](skills/build-party-roster/) | Promote Person/Judge/etc. mentions to Party resources, encode role bindings | `+ yield.fromAnnotation` |
+| [`build-party-roster`](skills/build-party-roster/) | Promote Person/Judge/etc. mentions to Party resources, encode role bindings | `+ yield.fromContext` |
 | [`subsequent-treatment`](skills/subsequent-treatment/) | For a target case, classify the treatment in every citing case | `mark.assist` (tagging), `yield.resource` |
 | [`doctrinal-trace`](skills/doctrinal-trace/) | Given a doctrine query, synthesize a research memo across the corpus | full pipeline composition |
 
