@@ -5,7 +5,7 @@
  * Usage: tsx skills/build-citation-graph/script.ts [<caseResourceId>] [--interactive]
  */
 
-import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
 function getMediaType(r: any): string | undefined {
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'caselaw-build-citation-graph',
     label: 'caselaw build-citation-graph',
     email,
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   const semiont = session.client;
 
   try {
-    const all = await semiont.browse.resources({ limit: 1000 });
+    const all = (await semiont.browse.resources({ limit: 1000 }).fresh()).resources;
     const caseIndex = new Map<string, CaseInfo>();
     for (const r of all) {
       if (!(r.entityTypes ?? []).some((t) => t === 'Case')) continue;
@@ -90,7 +90,7 @@ async function main(): Promise<void> {
 
     console.log(`Walking ${caseIndex.size} cases for citation edges...`);
     for (const info of caseIndex.values()) {
-      const annotations = await semiont.browse.annotations(info.rIdBrand);
+      const annotations = await semiont.browse.annotations(info.rIdBrand).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
