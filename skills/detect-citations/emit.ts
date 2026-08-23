@@ -10,7 +10,7 @@
  * Usage: tsx skills/detect-citations/emit.ts <inDir>
  */
 
-import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand } from '@semiont/sdk';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'caselaw-detect-citations-emit',
     label: 'caselaw detect-citations-emit',
     email,

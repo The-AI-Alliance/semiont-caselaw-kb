@@ -9,7 +9,7 @@
  * Usage: tsx skills/doctrinal-trace/script.ts ["<doctrine query>"] [--interactive]
  */
 
-import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 30);
@@ -55,7 +55,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'caselaw-doctrinal-trace',
     label: 'caselaw doctrinal-trace',
     email,
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   const semiont = session.client;
 
   try {
-    const all = await semiont.browse.resources({ limit: 1000 });
+    const all = (await semiont.browse.resources({ limit: 1000 }).fresh()).resources;
     const cases = all.filter((r) => {
       const isCase = (r.entityTypes ?? []).some((t) => t === 'Case');
       const mt = getMediaType(r);
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
     // Step 1 — match.search across the corpus with the query as the search text.
     // We use the search filter on browse.resources for the first-pass selection;
     // it's coarser than match.search but doesn't need an annotation anchor.
-    const filtered = await semiont.browse.resources({ limit: 100, search: query });
+    const filtered = (await semiont.browse.resources({ limit: 100, search: query }).fresh()).resources;
     const candidates: CandidateCase[] = filtered
       .filter((r) => (r.entityTypes ?? []).some((t) => t === 'Case'))
       .slice(0, MAX_CANDIDATES)
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
     // Step 2 — gather IRAC excerpts (Rule + Application paragraphs) per candidate.
     console.log('\nGathering IRAC excerpts and citation-graph data...');
     for (const c of candidates) {
-      const annotations = await semiont.browse.annotations(c.rId);
+      const annotations = await semiont.browse.annotations(c.rId).fresh();
       for (const ann of annotations) {
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
         if (ann.motivation === 'tagging') {
@@ -177,7 +177,7 @@ async function main(): Promise<void> {
       if (candidateIds.has(r['@id'])) {
         // skip self-walk; candidates' own annotations were walked above
       }
-      const annotations = await semiont.browse.annotations(ridBrand(r['@id']));
+      const annotations = await semiont.browse.annotations(ridBrand(r['@id'])).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];

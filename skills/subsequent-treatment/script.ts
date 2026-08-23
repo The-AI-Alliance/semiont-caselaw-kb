@@ -18,7 +18,7 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KnowledgeBase,
+  type KbTarget,
   resourceId as ridBrand,
   type AnnotationId,
   type ResourceId,
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'caselaw-subsequent-treatment',
     label: 'caselaw subsequent-treatment',
     email,
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   const semiont = session.client;
 
   try {
-    const all = await semiont.browse.resources({ limit: 1000 });
+    const all = (await semiont.browse.resources({ limit: 1000 }).fresh()).resources;
     const cases = all.filter((r) => {
       const isCase = (r.entityTypes ?? []).some((t) => t === 'Case');
       const mt = getMediaType(r);
@@ -92,7 +92,7 @@ async function main(): Promise<void> {
     for (const r of cases) {
       if (r['@id'] === targetIdArg) continue;
       const rId = ridBrand(r['@id']);
-      const annotations = await semiont.browse.annotations(rId);
+      const annotations = await semiont.browse.annotations(rId).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
@@ -192,7 +192,7 @@ async function main(): Promise<void> {
     for (const t of TREATMENT_CATEGORIES) breakdown.set(t, 0);
 
     for (const [citingCaseId, hits] of perCaseAnnotations) {
-      const annotations = await semiont.browse.annotations(ridBrand(citingCaseId));
+      const annotations = await semiont.browse.annotations(ridBrand(citingCaseId)).fresh();
       const taggedHits: { treatments: string[]; quote: string }[] = [];
       for (const ann of annotations) {
         // Treatment annotations are now `motivation: 'tagging'` with a
