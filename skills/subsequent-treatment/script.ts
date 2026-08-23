@@ -26,6 +26,7 @@ import {
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
 import { LEGAL_CITATION_TREATMENT_SCHEMA } from '../../src/tag-schemas.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const TREATMENT_CATEGORIES = LEGAL_CITATION_TREATMENT_SCHEMA.tags.map((t) => t.name);
 
@@ -36,14 +37,6 @@ interface CitingHit {
   citationText: string;
 }
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 80);
@@ -97,12 +90,14 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'linking') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
         const tags = bodies
-          .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-          .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
+          .flatMap((b) =>
+            b.type === 'TextualBody' && b.purpose === 'tagging'
+              ? (Array.isArray(b.value) ? b.value : [b.value])
+              : [],
+          );
         if (!tags.includes('Citation')) continue;
         const targets = bodies
-          .filter((b: any) => b.type === 'SpecificResource' && b.purpose === 'linking')
-          .map((b: any) => b.source as string);
+          .flatMap((b) => (b.type === 'SpecificResource' && b.purpose === 'linking' ? [b.source] : []));
         if (!targets.includes(targetIdArg)) continue;
         const annTarget = ann.target;
         const selectors =
@@ -201,8 +196,11 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'tagging') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
         const tags = bodies
-          .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-          .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]))
+          .flatMap((b) =>
+            b.type === 'TextualBody' && b.purpose === 'tagging'
+              ? (Array.isArray(b.value) ? b.value : [b.value])
+              : [],
+          )
           .filter((t: string) => TREATMENT_CATEGORIES.includes(t));
         if (tags.length === 0) continue;
         const target = ann.target;

@@ -10,6 +10,7 @@
 import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const DEFAULT_INSTRUCTIONS = `
 Identify and flag the spine of this judicial opinion. For each, quote the language and
@@ -23,14 +24,6 @@ Skip narrative paragraphs and quoted authority.
 
 const INSTRUCTIONS = process.env.ASSESS_INSTRUCTIONS ?? DEFAULT_INSTRUCTIONS;
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2).filter((a) => !a.startsWith('-'));

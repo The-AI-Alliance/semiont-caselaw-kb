@@ -14,18 +14,11 @@ import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ri
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
 import { LEGAL_IRAC_SCHEMA } from '../../src/tag-schemas.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const SCHEMA_ID = LEGAL_IRAC_SCHEMA.id;
 const CATEGORIES = LEGAL_IRAC_SCHEMA.tags.map((t) => t.name);
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2).filter((a) => !a.startsWith('-'));

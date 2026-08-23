@@ -35,9 +35,11 @@ import {
   resourceId as ridBrand,
   type AnnotationId,
   type ResourceId,
+  type Annotation,
 } from '@semiont/sdk';
 import { citationLookup, courtListenerUrl, type CourtListenerCase } from '../../src/courtlistener.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const MAX_REMOTE_LOOKUPS = Number(process.env.MAX_REMOTE_LOOKUPS ?? 2000);
 const SKIP_REMOTE = process.env.SKIP_REMOTE === '1';
@@ -48,14 +50,6 @@ const SKIP_REMOTE = process.env.SKIP_REMOTE === '1';
 const SKIP_TYPES = new Set(['JournalCitation', 'StatutoryCitation']);
 const BACKREF_TYPES = new Set(['SupraCitation', 'IdCitation']);
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 80);
@@ -109,7 +103,7 @@ interface CitationAnno {
   start: number;
 }
 
-function getStart(ann: any): number {
+function getStart(ann: Annotation): number {
   const target = ann.target;
   if (typeof target === 'string' || !target.selector) return 0;
   const selectors = Array.isArray(target.selector) ? target.selector : [target.selector];
@@ -119,7 +113,7 @@ function getStart(ann: any): number {
   return 0;
 }
 
-function getQuote(ann: any): string {
+function getQuote(ann: Annotation): string {
   const target = ann.target;
   if (typeof target === 'string' || !target.selector) return '';
   const selectors = Array.isArray(target.selector) ? target.selector : [target.selector];
@@ -182,12 +176,15 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'linking') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
         const tags = bodies
-          .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-          .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
+          .flatMap((b) =>
+            b.type === 'TextualBody' && b.purpose === 'tagging'
+              ? (Array.isArray(b.value) ? b.value : [b.value])
+              : [],
+          );
         if (!tags.includes('Citation')) continue;
         if (tags.some((t: string) => SKIP_TYPES.has(t))) { skippedType++; continue; }
         const isBound = bodies.some(
-          (b: any) => b.type === 'SpecificResource' && b.purpose === 'linking',
+          (b) => b.type === 'SpecificResource' && b.purpose === 'linking',
         );
         if (isBound) { alreadyBound++; continue; }
         const citationType = tags.find((t: string) => t !== 'Citation') ?? 'UnspecifiedCitation';

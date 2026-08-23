@@ -11,6 +11,7 @@
 
 import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 30);
 const MAX_CANDIDATES = Number(process.env.MAX_CANDIDATES ?? 15);
@@ -26,14 +27,6 @@ interface CandidateCase {
   negativeTreatments: string[];
 }
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 80);
@@ -134,8 +127,11 @@ async function main(): Promise<void> {
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
         if (ann.motivation === 'tagging') {
           const tags = bodies
-            .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-            .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
+            .flatMap((b) =>
+              b.type === 'TextualBody' && b.purpose === 'tagging'
+                ? (Array.isArray(b.value) ? b.value : [b.value])
+                : [],
+            );
           if (tags.includes('Rule') || tags.includes('Application')) {
             const target = ann.target;
             const selectors =
@@ -158,12 +154,14 @@ async function main(): Promise<void> {
         }
         if (ann.motivation === 'linking') {
           const tags = bodies
-            .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-            .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
+            .flatMap((b) =>
+              b.type === 'TextualBody' && b.purpose === 'tagging'
+                ? (Array.isArray(b.value) ? b.value : [b.value])
+                : [],
+            );
           if (tags.includes('Citation')) {
             const targets = bodies
-              .filter((b: any) => b.type === 'SpecificResource' && b.purpose === 'linking')
-              .map((b: any) => b.source as string);
+              .flatMap((b) => (b.type === 'SpecificResource' && b.purpose === 'linking' ? [b.source] : []));
             if (targets.length > 0) c.outgoingCount++;
           }
         }
@@ -182,12 +180,14 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'linking') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
         const tags = bodies
-          .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-          .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
+          .flatMap((b) =>
+            b.type === 'TextualBody' && b.purpose === 'tagging'
+              ? (Array.isArray(b.value) ? b.value : [b.value])
+              : [],
+          );
         if (!tags.includes('Citation')) continue;
         const targets = bodies
-          .filter((b: any) => b.type === 'SpecificResource' && b.purpose === 'linking')
-          .map((b: any) => b.source as string);
+          .flatMap((b) => (b.type === 'SpecificResource' && b.purpose === 'linking' ? [b.source] : []));
         for (const t of targets) {
           if (candidateIds.has(t)) {
             const c = candidates.find((cc) => cc.rIdRaw === t);

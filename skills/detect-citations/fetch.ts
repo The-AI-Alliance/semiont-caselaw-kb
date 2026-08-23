@@ -19,15 +19,8 @@
 import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { getMediaType } from '../../src/media-type.js';
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 async function main(): Promise<void> {
   const [outDir, explicitResourceId] = process.argv.slice(2);

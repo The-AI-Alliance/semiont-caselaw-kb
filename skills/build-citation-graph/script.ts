@@ -78,8 +78,8 @@ async function main(): Promise<void> {
       // synthesized by a previous run isn't a Case, but Stub cases from skill 6
       // *are* Cases — keep those).
       targetIds = Array.from(caseIndex.keys()).filter((id) => {
-        const md = (all.find((r) => r['@id'] === id) as any) ?? {};
-        const mt = getMediaType(md);
+        const md = all.find((r) => r['@id'] === id);
+        const mt = md ? getMediaType(md) : undefined;
         return mt === 'text/markdown' || mt === 'text/plain';
       });
     }
