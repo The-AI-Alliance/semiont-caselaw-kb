@@ -2,7 +2,7 @@
  * build-party-roster — promote Person/Judge/Plaintiff/etc. mentions to
  * canonical Party resources, role-tagged.
  *
- * Pass: cluster + match + bind / yield.fromAnnotation + bind.
+ * Pass: cluster + match + bind / yield.fromContext + bind.
  *
  * Usage: tsx skills/build-party-roster/script.ts [--interactive]
  */
@@ -197,10 +197,9 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const yieldEvent = await semiont.yield.fromAnnotation(sample.rId, sample.annId, {
+        const yieldEvent = await semiont.yield.fromContext(context, {
           title: sample.text,
           storageUri: `file://generated/party-${slugify(sample.text)}.md`,
-          context,
           entityTypes: ['Party', ...rolesInCluster],
         });
         if (yieldEvent.kind !== 'complete') {
@@ -209,7 +208,7 @@ async function main(): Promise<void> {
         }
         const newRId = (yieldEvent.data.result as { resourceId?: string } | undefined)?.resourceId;
         if (!newRId) {
-          console.warn(`  yield.fromAnnotation gave no resourceId for "${sample.text}"`);
+          console.warn(`  yield.fromContext gave no resourceId for "${sample.text}"`);
           continue;
         }
         targetResourceId = newRId;
