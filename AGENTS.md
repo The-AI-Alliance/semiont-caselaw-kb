@@ -14,7 +14,7 @@ If you're an AI assistant working in this repo, this file is your orientation. T
   - `src/uscode.ts` — US Code lookup against `uscode.house.gov` bulk XML, cached locally per title
   - `src/interactive.ts` — `confirm` / `pick` / `preview` helpers for tier-3 interactive checkpoints
 - **`skills/detect-citations/`** — the only skill that's not a single `script.ts`. Ships a bash wrapper (`run.sh`) driving a three-phase pipeline: `fetch.ts` (Node) → `detect_citations.py` (Python, in the `semiont-eyecite` container) → `emit.ts` (Node). Plus a `Dockerfile` for the Python runtime.
-- **`skills/`** — eleven skills, each shipping a `SKILL.md` plus a `script.ts` that uses `@semiont/sdk` against the running backend. (`detect-citations` is the exception — see above.)
+- **`skills/`** — eleven skills, each shipping a `SKILL.md` plus a `script.ts` that uses `@semiont/sdk` against the running stack. (`detect-citations` is the exception — see above.)
 
 | Skill | What it does | New SDK verbs |
 |---|---|---|
@@ -79,7 +79,7 @@ The DoctrinalTrace memo is the demonstration: a queryable, sourced legal-researc
 
 ## Working in containers — do not install npm packages on the host
 
-This template assumes a containerized workflow. The backend stack runs in containers (`semiont start` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, eyecite, or any other tooling on the host machine.
+This template assumes a containerized workflow. The stack runs in containers (`semiont start` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, eyecite, or any other tooling on the host machine.
 
 Each skill's `SKILL.md` shows a `container run` invocation that mounts the repo, installs `@semiont/sdk` and `tsx` *inside* a throwaway container, then runs the skill's `script.ts`. See [`skills/ingest-cases/SKILL.md`](skills/ingest-cases/SKILL.md) for the full networking discussion (the `HOST_ADDR` discovery probe).
 
@@ -93,9 +93,9 @@ container build -t semiont-eyecite:latest skills/detect-citations
 
 Then run [`skills/detect-citations/run.sh`](skills/detect-citations/run.sh), which orchestrates the three-phase pipeline: a Node container fetches case bodies via the SDK, a host-side `for` loop pipes each body through `container run --rm -i semiont-eyecite:latest`, and a second Node container emits one `mark.annotation` per detected citation. The wrapper honors `CONTAINER_RUNTIME` (defaults to `container`; substitute `docker` / `podman` as needed).
 
-## Backend setup
+## Stack setup
 
-Before running any skill, the Semiont backend stack must be up. Two paths:
+Before running any skill, the Semiont stack must be up. Two paths:
 
 ### Local: `semiont start`
 
@@ -114,7 +114,7 @@ Flags: `--config anthropic` for cloud inference (requires `ANTHROPIC_API_KEY`), 
 
 ### Codespaces
 
-Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up. No account is created — make the first admin with `docker compose -f .semiont/compose/backend.yml exec backend semiont-useradd --email you@example.com --generate-password --admin`. Forward the port: `gh codespace ports forward 4000:4000`.
+Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up. No account is created — make the first admin with `docker compose -f .semiont/compose/backend.yml exec gateway semiont-useradd --email you@example.com --generate-password --admin`. Forward the port: `gh codespace ports forward 4000:4000`.
 
 ## Parameterization and interactivity
 
@@ -124,7 +124,7 @@ Skills are parameterized in three tiers.
 
 | Var | Purpose |
 |---|---|
-| `SEMIONT_API_URL` | Backend URL (default `http://localhost:4000`) |
+| `SEMIONT_API_URL` | Gateway URL (default `http://localhost:4000`) |
 | `SEMIONT_USER_EMAIL` | Authenticating user |
 | `SEMIONT_USER_PASSWORD` | Authenticating user's password |
 | `COURTLISTENER_API_KEY` | Optional; raises CourtListener rate-limit ceiling |

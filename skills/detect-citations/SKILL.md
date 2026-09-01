@@ -34,7 +34,7 @@ Each annotation stays unresolved (no `SpecificResource` body item yet) — `grou
 | Parameter | Type | Default | Purpose |
 |---|---|---|---|
 | `<resourceId>` | CLI arg (optional) | all Case resources | Restrict to one case |
-| `SEMIONT_API_URL` | env | discovered via `HOST_ADDR` probe | Backend URL |
+| `SEMIONT_API_URL` | env | discovered via `HOST_ADDR` probe | Gateway URL |
 | `SEMIONT_USER_EMAIL` | env | `admin@example.com` | Auth |
 | `SEMIONT_USER_PASSWORD` | env | `password` | Auth |
 | `CONTAINER_RUNTIME` | env | `container` | Runtime to use (also `docker`/`podman`) |
@@ -75,7 +75,7 @@ The wrapper clears these at the start of each run so stale results from a prior 
 
 ## Guidance for the AI assistant
 
-- **eyecite is deterministic.** Re-running on the same case produces the same citation set. But the skill creates *new* mark.annotation records each time — no dedup. Restart the backend or hand-delete prior annotations to start fresh.
+- **eyecite is deterministic.** Re-running on the same case produces the same citation set. But the skill creates *new* mark.annotation records each time — no dedup. Restart the stack or hand-delete prior annotations to start fresh.
 - **One container invocation per case in phase 2.** ~200–400 ms of container startup per call. For a 100-case corpus, expect ~30–60 s of detection wall-time on top of LLM-free citation extraction. Batching multiple bodies through one eyecite invocation is a future optimization (requires changes to `detect_citations.py`'s stdin protocol).
 - **Citation types matter for downstream skills.** `extract-statutory-refs` keys off the `FullLawCitation` / statutory subset; `ground-citations` handles `FullCaseCitation` / `ShortCaseCitation` / `IdCitation` / `SupraCitation`. The tag body on each annotation is what those skills read.
 - **Spans use `TextPositionSelector`.** eyecite reports byte offsets in the source text. The annotation records both `start` and `end` so resolution doesn't need to re-scan the document text.
