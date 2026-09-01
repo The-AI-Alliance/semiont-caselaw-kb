@@ -17,7 +17,7 @@
 # Usage:
 #   bash skills/detect-citations/run.sh [<resourceId>]
 #
-# Environment (defaults match the local backend):
+# Environment (defaults match the local stack):
 #   SEMIONT_API_URL          (default: discovered via HOST_ADDR probe)
 #   SEMIONT_USER_EMAIL       (default: admin@example.com)
 #   SEMIONT_USER_PASSWORD    (default: password)
@@ -39,7 +39,7 @@ IMAGE="${EYECITE_IMAGE_TAG:-semiont-eyecite:latest}"
 CACHE_DIR=".cache/citation-detection"
 
 # HOST_ADDR for the inner Node containers to reach the host's Semiont
-# backend. Same trick `semiont start` uses.
+# stack. Same trick `semiont start` uses.
 HOST_ADDR=$(${RUNTIME} run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
 SEMIONT_API_URL="${SEMIONT_API_URL:-http://${HOST_ADDR}:4000}"
 SEMIONT_USER_EMAIL="${SEMIONT_USER_EMAIL:-admin@example.com}"

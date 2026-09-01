@@ -57,6 +57,6 @@ Add `-e SEMIONT_INTERACTIVE=1 -it` for the confirm prompt.
 
 ## Guidance for the AI assistant
 
-- **Quality scales with the model.** With a stronger backend model (Claude Opus / Sonnet), IRAC tagging is reasonably accurate; with smaller models, expect more mis-classifications. Spot-check a few cases interactively before running the corpus-wide pass.
+- **Quality scales with the model.** With a stronger inference model (Claude Opus / Sonnet), IRAC tagging is reasonably accurate; with smaller models, expect more mis-classifications. Spot-check a few cases interactively before running the corpus-wide pass.
 - **The Rule + Application tags drive `doctrinal-trace`.** Skill 11 walks Rule paragraphs to find cases that articulate a doctrine, and Application paragraphs to see how the doctrine has been applied.
 - **One tag per paragraph; not every paragraph gets one.** Procedural posture, factual narration, and meta-commentary stay un-tagged. Re-tuning the directive via `IRAC_INSTRUCTIONS` is how you change that policy.
