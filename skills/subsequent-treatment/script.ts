@@ -19,6 +19,7 @@ import {
   SemiontSession,
   InMemorySessionStorage,
   httpKb,
+  getBodySource,
   getEntityTypes,
   resourceId as ridBrand,
   type AnnotationId,
@@ -94,8 +95,8 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'linking') continue;
         const tags = getEntityTypes(ann);
         if (!tags.includes('Citation')) continue;
-        const targets = bodies
-          .flatMap((b) => (b.type === 'SpecificResource' && b.purpose === 'linking' ? [b.source] : []));
+        const bound = getBodySource(ann.body);
+        const targets = bound ? [bound] : [];
         if (!targets.includes(targetIdArg)) continue;
         const annTarget = ann.target;
         const selectors =

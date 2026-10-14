@@ -14,6 +14,7 @@ import {
   InMemorySessionStorage,
   httpKb,
   getAnnotationExactText,
+  getBodySource,
   getEntityTypes,
   resourceId as ridBrand,
   type ResourceId,
@@ -83,9 +84,9 @@ async function main(): Promise<void> {
     }
 
     // Step 1 — match.search across the corpus with the query as the search text.
-    // We use the search filter on browse.resources for the first-pass selection;
+    // We use match.resources, a text search, for the first-pass selection;
     // it's coarser than match.search but doesn't need an annotation anchor.
-    const filtered = (await semiont.browse.resources({ limit: 100, search: query }).fresh()).resources;
+    const filtered = (await semiont.match.resources(query, { limit: 100 }).fresh()).resources;
     const candidates: CandidateCase[] = filtered
       .filter((r) => (r.entityTypes ?? []).some((t) => t === 'Case'))
       .slice(0, MAX_CANDIDATES)
@@ -182,8 +183,8 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'linking') continue;
         const tags = getEntityTypes(ann);
         if (!tags.includes('Citation')) continue;
-        const targets = bodies
-          .flatMap((b) => (b.type === 'SpecificResource' && b.purpose === 'linking' ? [b.source] : []));
+        const bound = getBodySource(ann.body);
+        const targets = bound ? [bound] : [];
         for (const t of targets) {
           if (candidateIds.has(t)) {
             const c = candidates.find((cc) => cc.rIdRaw === t);

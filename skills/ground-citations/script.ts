@@ -32,6 +32,7 @@ import {
   SemiontSession,
   InMemorySessionStorage,
   httpKb,
+  getBodySource,
   getEntityTypes,
   type Annotation,
   type AnnotationId,
@@ -181,9 +182,7 @@ async function main(): Promise<void> {
         const tags = getEntityTypes(ann);
         if (!tags.includes('Citation')) continue;
         if (tags.some((t: string) => SKIP_TYPES.has(t))) { skippedType++; continue; }
-        const isBound = bodies.some(
-          (b) => b.type === 'SpecificResource' && b.purpose === 'linking',
-        );
+        const isBound = getBodySource(ann.body) !== null;
         if (isBound) { alreadyBound++; continue; }
         const citationType = tags.find((t: string) => t !== 'Citation') ?? 'UnspecifiedCitation';
         const text = getQuote(ann);

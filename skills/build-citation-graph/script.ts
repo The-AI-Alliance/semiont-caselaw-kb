@@ -5,7 +5,15 @@
  * Usage: tsx skills/build-citation-graph/script.ts [<caseResourceId>] [--interactive]
  */
 
-import { SemiontSession, InMemorySessionStorage, httpKb, getEntityTypes, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import {
+  SemiontSession,
+  InMemorySessionStorage,
+  httpKb,
+  getBodySource,
+  getEntityTypes,
+  resourceId as ridBrand,
+  type ResourceId,
+} from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { getMediaType } from '../../src/media-type.js';
 
@@ -92,8 +100,8 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'linking') continue;
         const tags = getEntityTypes(ann);
         if (!tags.includes('Citation')) continue;
-        const targets = bodies
-          .flatMap((b) => (b.type === 'SpecificResource' && b.purpose === 'linking' ? [b.source] : []));
+        const bound = getBodySource(ann.body);
+        const targets = bound ? [bound] : [];
         for (const t of targets) {
           if (caseIndex.has(t)) {
             outgoing.get(info.rId)!.add(t);

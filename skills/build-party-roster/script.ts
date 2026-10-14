@@ -12,6 +12,7 @@ import {
   InMemorySessionStorage,
   httpKb,
   getAnnotationExactText,
+  getBodySource,
   getEntityTypes,
   type AnnotationId,
   type ResourceId,
@@ -87,9 +88,7 @@ async function main(): Promise<void> {
         const tags = getEntityTypes(ann);
         const roleTags = tags.filter((t) => ROLE_TAGS.has(t));
         if (roleTags.length === 0) continue;
-        const alreadyBound = bodies.some(
-          (b) => b.type === 'SpecificResource' && b.purpose === 'linking',
-        );
+        const alreadyBound = getBodySource(ann.body) !== null;
         const text = getAnnotationExactText(ann);
         partyAnnotations.push({
           rId,
