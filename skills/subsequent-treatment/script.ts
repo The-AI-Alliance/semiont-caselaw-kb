@@ -95,9 +95,7 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'linking') continue;
         const tags = getEntityTypes(ann);
         if (!tags.includes('Citation')) continue;
-        const bound = getBodySource(ann.body);
-        const targets = bound ? [bound] : [];
-        if (!targets.includes(targetIdArg)) continue;
+        if (getBodySource(ann.body) !== targetId) continue;
         const annTarget = ann.target;
         const selectors =
           typeof annTarget === 'string' || !annTarget.selector
