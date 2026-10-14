@@ -9,7 +9,15 @@
  * Usage: tsx skills/doctrinal-trace/script.ts ["<doctrine query>"] [--interactive]
  */
 
-import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import {
+  SemiontSession,
+  InMemorySessionStorage,
+  httpKb,
+  getAnnotationExactText,
+  getEntityTypes,
+  resourceId as ridBrand,
+  type ResourceId,
+} from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { getMediaType } from '../../src/media-type.js';
 
@@ -44,17 +52,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'caselaw-doctrinal-trace',
-    label: 'caselaw doctrinal-trace',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'caselaw-doctrinal-trace',
+      label: 'caselaw doctrinal-trace',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -78,7 +90,7 @@ async function main(): Promise<void> {
       .filter((r) => (r.entityTypes ?? []).some((t) => t === 'Case'))
       .slice(0, MAX_CANDIDATES)
       .map((r) => ({
-        rId: ridBrand(r['@id']),
+        rId: r['@id'],
         rIdRaw: r['@id'],
         name: r.name ?? r['@id'],
         score: 0,
@@ -94,7 +106,7 @@ async function main(): Promise<void> {
       // with the structure intact.
       cases.slice(0, MAX_CANDIDATES).forEach((r) => {
         candidates.push({
-          rId: ridBrand(r['@id']),
+          rId: r['@id'],
           rIdRaw: r['@id'],
           name: r.name ?? r['@id'],
           score: 0,
@@ -133,17 +145,7 @@ async function main(): Promise<void> {
                 : [],
             );
           if (tags.includes('Rule') || tags.includes('Application')) {
-            const target = ann.target;
-            const selectors =
-              typeof target === 'string' || !target.selector
-                ? []
-                : Array.isArray(target.selector)
-                  ? target.selector
-                  : [target.selector];
-            let text = '';
-            for (const s of selectors) {
-              if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
-            }
+            const text = getAnnotationExactText(ann);
             if (text) {
               c.iracExcerpts.push({
                 tag: tags.find((t: string) => t === 'Rule' || t === 'Application') ?? 'unknown',
@@ -175,16 +177,10 @@ async function main(): Promise<void> {
       if (candidateIds.has(r['@id'])) {
         // skip self-walk; candidates' own annotations were walked above
       }
-      const annotations = await semiont.browse.annotations(ridBrand(r['@id'])).fresh();
+      const annotations = await semiont.browse.annotations(r['@id']).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
-        const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-        const tags = bodies
-          .flatMap((b) =>
-            b.type === 'TextualBody' && b.purpose === 'tagging'
-              ? (Array.isArray(b.value) ? b.value : [b.value])
-              : [],
-          );
+        const tags = getEntityTypes(ann);
         if (!tags.includes('Citation')) continue;
         const targets = bodies
           .flatMap((b) => (b.type === 'SpecificResource' && b.purpose === 'linking' ? [b.source] : []));

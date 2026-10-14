@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write
 
 You are helping the user build the **party roster** — the who's-who of the caselaw corpus — out of skill 3's entity annotations.
 
-This is a tier-2 skill. It composes `gather.annotation` + `match.search` + `yield.fromContext` + `bind.body`, similar to the legal-kb's `build-party-graph` and the gutenberg-kb's `build-character-articles` patterns.
+This is a tier-2 skill. It composes `gather.annotation` + `match.search` + `yield.delegate` + `bind.body`, similar to the legal-kb's `build-party-graph` and the gutenberg-kb's `build-character-articles` patterns.
 
 Foundational for skill 11 (`doctrinal-trace`), which surfaces "judges who write on this issue" empirically from the roster.
 
@@ -20,13 +20,13 @@ Foundational for skill 11 (`doctrinal-trace`), which surfaces "judges who write 
    - `gather.annotation` for context — same surname might refer to different parties across cases.
    - `match.search` for an existing Party resource with this name.
    - If a candidate scores ≥ `MATCH_THRESHOLD`: `bind.body` the annotation to it.
-   - Otherwise: `yield.fromContext` to synthesize a new `Party` resource with role tags as additional entity types (e.g., `[Party, Judge]` for a judge mention).
+   - Otherwise: `yield.delegate` to synthesize a new `Party` resource with role tags as additional entity types (e.g., `[Party, Judge]` for a judge mention).
 
 The Party resource's body markdown captures: full name, role(s) inferred from the annotations, and the cluster-size (number of case references).
 
 ## SDK verbs
 
-- `browse.resources`, `browse.annotations`, `gather.annotation`, `match.search`, `yield.fromContext`, `bind.body`
+- `browse.resources`, `browse.annotations`, `gather.annotation`, `match.search`, `yield.delegate`, `bind.body`
 
 ## Parameters
 
@@ -47,11 +47,11 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/build-party-roster/script.ts'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/build-party-roster/script.ts'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Add `-e SEMIONT_INTERACTIVE=1 -it` for the per-cluster confirms.
 

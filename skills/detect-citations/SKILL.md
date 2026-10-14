@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write
 
 You are helping the user build the citation layer over an ingested caselaw corpus. eyecite is the [Free Law Project](https://github.com/freelawproject/eyecite)'s deterministic regex/NLP citation extractor — orders of magnitude cheaper and more accurate than asking an LLM to do this.
 
-This skill **does not** use `mark.assist`. The detection is deterministic; the annotations are recorded with their exact eyecite-reported byte positions.
+This skill **does not** use `mark.delegate`. The detection is deterministic; the annotations are recorded with their exact eyecite-reported byte positions.
 
 ## What it does
 
@@ -22,7 +22,7 @@ Each annotation stays unresolved (no `SpecificResource` body item yet) — `grou
 
 ## Why three phases instead of one script
 
-`mark.assist`-based skills run as a single tsx call inside a Node container. This one can't — eyecite is Python, which lives in a separate container, and Apple's `container` runtime doesn't expose a socket for nested-container spawning. So the per-case `cat body | container run eyecite` step happens on the host between the two Node containers (which handle the SDK fetch and emit). The bash wrapper enforces the shape; the data flow is a textbook ingestion pipeline.
+`mark.delegate`-based skills run as a single tsx call inside a Node container. This one can't — eyecite is Python, which lives in a separate container, and Apple's `container` runtime doesn't expose a socket for nested-container spawning. So the per-case `cat body | container run eyecite` step happens on the host between the two Node containers (which handle the SDK fetch and emit). The bash wrapper enforces the shape; the data flow is a textbook ingestion pipeline.
 
 ## SDK verbs
 
@@ -35,8 +35,8 @@ Each annotation stays unresolved (no `SpecificResource` body item yet) — `grou
 |---|---|---|---|
 | `<resourceId>` | CLI arg (optional) | all Case resources | Restrict to one case |
 | `SEMIONT_API_URL` | env | discovered via `HOST_ADDR` probe | Gateway URL |
-| `SEMIONT_USER_EMAIL` | env | `admin@example.com` | Auth |
-| `SEMIONT_USER_PASSWORD` | env | `password` | Auth |
+
+A skill signs in by the device grant: it prints an address, and a person approves in a browser. No password passes through the script. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 | `CONTAINER_RUNTIME` | env | `container` | Runtime to use (also `docker`/`podman`) |
 | `EYECITE_IMAGE_TAG` | env | `semiont-eyecite:latest` | Override the eyecite image tag |
 

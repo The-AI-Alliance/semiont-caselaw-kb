@@ -31,11 +31,11 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KbTarget,
-  resourceId as ridBrand,
+  httpKb,
+  getEntityTypes,
+  type Annotation,
   type AnnotationId,
   type ResourceId,
-  type Annotation,
 } from '@semiont/sdk';
 import { citationLookup, courtListenerUrl, type CourtListenerCase } from '../../src/courtlistener.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
@@ -124,17 +124,21 @@ function getQuote(ann: Annotation): string {
 }
 
 async function main(): Promise<void> {
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'caselaw-ground-citations',
-    label: 'caselaw ground-citations',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'caselaw-ground-citations',
+      label: 'caselaw ground-citations',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -154,7 +158,7 @@ async function main(): Promise<void> {
     // Local Case index: normalized name → resourceId. Includes both the
     // ingested corpus cases and any pre-existing CourtListenerStub cases
     // from earlier runs (so we don't create duplicate stubs).
-    const localCaseIndex = new Map<string, string>();
+    const localCaseIndex = new Map<string, ResourceId>();
     for (const r of cases) {
       const name = r.name ?? '';
       if (!name) continue;
@@ -170,17 +174,11 @@ async function main(): Promise<void> {
     let skippedType = 0;
 
     for (const r of cases) {
-      const rId = ridBrand(r['@id']);
+      const rId = r['@id'];
       const annotations = await semiont.browse.annotations(rId).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
-        const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-        const tags = bodies
-          .flatMap((b) =>
-            b.type === 'TextualBody' && b.purpose === 'tagging'
-              ? (Array.isArray(b.value) ? b.value : [b.value])
-              : [],
-          );
+        const tags = getEntityTypes(ann);
         if (!tags.includes('Citation')) continue;
         if (tags.some((t: string) => SKIP_TYPES.has(t))) { skippedType++; continue; }
         const isBound = bodies.some(
@@ -233,14 +231,14 @@ async function main(): Promise<void> {
 
     // Track stubs created during this run so multiple citations to the same
     // out-of-corpus case bind to the same stub instead of creating duplicates.
-    const stubsThisRun = new Map<string, string>(); // normalizedName → stubResourceId
+    const stubsThisRun = new Map<string, ResourceId>(); // normalizedName → stubResourceId
 
     for (const [rId, citations] of byResource) {
       if (authAborted) break;
       citations.sort((a, b) => a.start - b.start);
       // Most recently resolved FullCase/Short/Unknown target in this document.
       // SupraCitation and IdCitation bind to this.
-      let lastResolvedTarget: string | null = null;
+      let lastResolvedTarget: ResourceId | null = null;
 
       for (const a of citations) {
         // ---- back-reference resolution (Supra/Id) ----

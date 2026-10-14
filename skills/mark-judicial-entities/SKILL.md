@@ -8,16 +8,16 @@ allowed-tools: Bash, Read, Write
 
 You are helping the user detect formally-named judicial-entity mentions across a caselaw corpus.
 
-This is one of three tier-1 marking skills for caselaw (alongside `tag-irac` and `assess-holdings`). It uses `mark.assist` with motivation `linking` to tag every named-entity span — the names that appear in the caption, the judges who write or join opinions, the parties to the litigation, and the counsel listed.
+This is one of three tier-1 marking skills for caselaw (alongside `tag-irac` and `assess-holdings`). It uses `mark.delegate` with motivation `linking` to tag every named-entity span — the names that appear in the caption, the judges who write or join opinions, the parties to the litigation, and the counsel listed.
 
 ## What it does
 
-For each Case resource (or one specific resource), runs `mark.assist({ motivation: 'linking', entityTypes: [...] })`. The default type list spans the thirteen entity types most useful for caselaw research.
+For each Case resource (or one specific resource), runs `mark.delegate({ motivation: 'linking', entityTypes: [...] })`. The default type list spans the thirteen entity types most useful for caselaw research.
 
 ## SDK verbs
 
 - `browse.resources` — find Case targets
-- `mark.assist({ motivation: 'linking', entityTypes: [...] })`
+- `mark.delegate({ motivation: 'linking', entityTypes: [...] })`
 
 ## Parameters
 
@@ -39,11 +39,11 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/mark-judicial-entities/script.ts'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/mark-judicial-entities/script.ts'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Add `-e SEMIONT_INTERACTIVE=1 -it` for the confirm prompt.
 

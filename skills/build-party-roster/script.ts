@@ -2,7 +2,7 @@
  * build-party-roster — promote Person/Judge/Plaintiff/etc. mentions to
  * canonical Party resources, role-tagged.
  *
- * Pass: cluster + match + bind / yield.fromContext + bind.
+ * Pass: cluster + match + bind / yield.delegate + bind.
  *
  * Usage: tsx skills/build-party-roster/script.ts [--interactive]
  */
@@ -10,10 +10,10 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KbTarget,
-  resourceId as ridBrand,
+  httpKb,
+  getAnnotationExactText,
+  getEntityTypes,
   type AnnotationId,
-  type GatheredContext,
   type ResourceId,
 } from '@semiont/sdk';
 import { confirm, isInteractive, close as closeInteractive } from '../../src/interactive.js';
@@ -47,17 +47,21 @@ interface PartyAnno {
 }
 
 async function main(): Promise<void> {
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'caselaw-build-party-roster',
-    label: 'caselaw build-party-roster',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'caselaw-build-party-roster',
+      label: 'caselaw build-party-roster',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -76,33 +80,17 @@ async function main(): Promise<void> {
 
     const partyAnnotations: PartyAnno[] = [];
     for (const r of cases) {
-      const rId = ridBrand(r['@id']);
+      const rId = r['@id'];
       const annotations = await semiont.browse.annotations(rId).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
-        const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-        const tags = bodies
-          .flatMap((b) =>
-            b.type === 'TextualBody' && b.purpose === 'tagging'
-              ? (Array.isArray(b.value) ? b.value : [b.value])
-              : [],
-          );
-        const roleTags = tags.filter((t: string) => ROLE_TAGS.has(t));
+        const tags = getEntityTypes(ann);
+        const roleTags = tags.filter((t) => ROLE_TAGS.has(t));
         if (roleTags.length === 0) continue;
         const alreadyBound = bodies.some(
           (b) => b.type === 'SpecificResource' && b.purpose === 'linking',
         );
-        const target = ann.target;
-        const selectors =
-          typeof target === 'string' || !target.selector
-            ? []
-            : Array.isArray(target.selector)
-              ? target.selector
-              : [target.selector];
-        let text = '';
-        for (const s of selectors) {
-          if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
-        }
+        const text = getAnnotationExactText(ann);
         partyAnnotations.push({
           rId,
           annId: ann.id,
@@ -164,11 +152,9 @@ async function main(): Promise<void> {
       if (!sample) continue;
       const rolesInCluster = Array.from(new Set(anns.flatMap((a) => a.roles)));
 
-      const gather = await semiont.gather.annotation(sample.rId, sample.annId, {
+      const { response: context } = await semiont.gather.annotation(sample.rId, sample.annId, {
         contextWindow: 1500,
       });
-      if (!('response' in gather)) continue;
-      const context = gather.response as GatheredContext;
 
       const matchResult = await semiont.match.search(sample.rId, sample.annId, context, {
         limit: 5,
@@ -176,7 +162,7 @@ async function main(): Promise<void> {
       });
       const top = matchResult.response[0];
 
-      let targetResourceId: string;
+      let targetResourceId: ResourceId;
       if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
         targetResourceId = top['@id'];
         console.log(`  ↪ "${sample.text}" → ${top.name} (existing, score ${top.score})`);
@@ -193,20 +179,17 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const yieldEvent = await semiont.yield.fromContext(context, {
+        const generated = await semiont.yield.delegate({
+          context,
           title: sample.text,
           storageUri: `file://generated/party-${slugify(sample.text)}.md`,
           entityTypes: ['Party', ...rolesInCluster],
         });
-        if (yieldEvent.kind !== 'complete') {
-          console.warn(`  unexpected yield event: ${yieldEvent.kind}`);
+        if (!generated.result || !('resourceId' in generated.result)) {
+          console.warn(`  the generation made no resource`);
           continue;
         }
-        const newRId = (yieldEvent.data.result as { resourceId?: string } | undefined)?.resourceId;
-        if (!newRId) {
-          console.warn(`  yield.fromContext gave no resourceId for "${sample.text}"`);
-          continue;
-        }
+        const newRId = generated.result.resourceId;
         targetResourceId = newRId;
         synthesized++;
         console.log(
