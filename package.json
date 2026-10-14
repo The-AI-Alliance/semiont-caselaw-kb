@@ -1,9 +1,9 @@
 {
   "dependencies": {
     "@semiont/sdk": "^0.6.13",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.1"
   }
 }
