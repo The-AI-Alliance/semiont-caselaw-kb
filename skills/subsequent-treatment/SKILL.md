@@ -15,13 +15,13 @@ Given the resource id of a target case:
 1. Walk every `linking`-motivation `Citation` annotation across the corpus whose `SpecificResource` body resolves to the target case (i.e., every place this case is cited).
 2. For each citing-case annotation:
    - `gather.annotation` to fetch a wide context window around the citation (default ±1500 chars).
-   - `mark.assist({ motivation: 'tagging', entityTypes: ['positive', ...], instructions: ... })` against the citing case at the citation span — classifies the treatment as one of `positive` / `negative` / `distinguished` / `criticized` / `overruled` / `neutral`.
+   - `mark.delegate({ motivation: 'tagging', schemaId: 'legal-citation-treatment', categories: [...] })` against the citing case — a tagging job classifies its passages by the schema's categories: `positive` / `negative` / `distinguished` / `criticized` / `overruled` / `neutral`. A tagging job takes no instructions.
 3. Aggregate the per-citation classifications into a markdown table.
 4. `yield.resource` a **SubsequentTreatment resource** (entity types `[SubsequentTreatment, Aggregate]`) keyed to the target case, with the treatment table, a summary of the breakdown, and the supporting language for negative / criticized / overruled treatments highlighted.
 
 ## SDK verbs
 
-- `browse.resources`, `browse.annotations`, `gather.annotation`, `mark.assist` (tagging mode), `yield.resource`
+- `browse.resources`, `browse.annotations`, `gather.annotation`, `mark.delegate` (tagging mode), `yield.resource`
 
 ## Parameters
 
@@ -45,11 +45,11 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/subsequent-treatment/script.ts <targetCaseResourceId>'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/subsequent-treatment/script.ts <targetCaseResourceId>'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Add `-e SEMIONT_INTERACTIVE=1 -it` for the per-citation classification preview.
 

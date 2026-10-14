@@ -22,8 +22,10 @@ running any specific skill.
 tsx skills/register-tag-schemas/script.ts
 ```
 
-Requires `SEMIONT_API_URL`, `SEMIONT_USER_EMAIL`, `SEMIONT_USER_PASSWORD`
-in the environment (same as every other skill in this KB).
+Reads `SEMIONT_API_URL` from the environment and signs in as every other
+skill in this KB does: it prints an address, and a person approves in a
+browser. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md)
+has the other ways a script can sign in.
 
 ## What gets registered
 

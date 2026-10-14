@@ -18,13 +18,13 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KbTarget,
+  httpKb,
+  getEntityTypes,
   resourceId as ridBrand,
   type AnnotationId,
   type ResourceId,
 } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
-import { createdCount } from '../../src/mark-result.js';
 import { LEGAL_CITATION_TREATMENT_SCHEMA } from '../../src/tag-schemas.js';
 import { getMediaType } from '../../src/media-type.js';
 
@@ -51,17 +51,21 @@ async function main(): Promise<void> {
   }
   const targetId = ridBrand(targetIdArg);
 
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'caselaw-subsequent-treatment',
-    label: 'caselaw subsequent-treatment',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'caselaw-subsequent-treatment',
+      label: 'caselaw subsequent-treatment',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -84,17 +88,11 @@ async function main(): Promise<void> {
     const citingHits: CitingHit[] = [];
     for (const r of cases) {
       if (r['@id'] === targetIdArg) continue;
-      const rId = ridBrand(r['@id']);
+      const rId = r['@id'];
       const annotations = await semiont.browse.annotations(rId).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
-        const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-        const tags = bodies
-          .flatMap((b) =>
-            b.type === 'TextualBody' && b.purpose === 'tagging'
-              ? (Array.isArray(b.value) ? b.value : [b.value])
-              : [],
-          );
+        const tags = getEntityTypes(ann);
         if (!tags.includes('Citation')) continue;
         const targets = bodies
           .flatMap((b) => (b.type === 'SpecificResource' && b.purpose === 'linking' ? [b.source] : []));
@@ -128,7 +126,7 @@ async function main(): Promise<void> {
     console.log(`Found ${citingHits.length} citing-annotation(s) for "${targetName}".`);
     console.log(`Treatment vocabulary: ${TREATMENT_CATEGORIES.join(', ')}`);
     const proceed = await confirm(
-      `Run mark.assist (tagging mode) on each citing case to classify treatment?`,
+      `Run mark.delegate (tagging mode) on each citing case to classify treatment?`,
       true,
     );
     if (!proceed) {
@@ -137,7 +135,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    // Run treatment classification per citing case. mark.assist scopes the
+    // Run treatment classification per citing case. mark.delegate scopes the
     // tagging pass to the whole citing case but the model is instructed to tag
     // only at the citation context.
     const perCaseAnnotations = new Map<string, CitingHit[]>();
@@ -156,16 +154,12 @@ async function main(): Promise<void> {
       const firstHit = hits[0];
       if (!firstHit) continue;
       try {
-        const progress = await semiont.mark.assist(
-          ridBrand(citingCaseId),
-          'tagging',
-          {
-            schemaId: LEGAL_CITATION_TREATMENT_SCHEMA.id,
-            categories: TREATMENT_CATEGORIES,
-            instructions: `Focus only on passages that cite "${targetName}" and classify those passages.`,
-          },
-        );
-        const n = createdCount(progress);
+        const progress = await semiont.mark.delegate(ridBrand(citingCaseId), {
+          motivation: 'tagging',
+          schemaId: LEGAL_CITATION_TREATMENT_SCHEMA.id,
+          categories: TREATMENT_CATEGORIES,
+        });
+        const n = progress.result && 'persisted' in progress.result ? progress.result.persisted : 0;
         console.log(`  ${firstHit.citingCaseName}: ${n} treatment tag(s)`);
       } catch (err) {
         console.warn(`  ! ${firstHit.citingCaseName}: ${(err as Error).message}`);
@@ -201,7 +195,7 @@ async function main(): Promise<void> {
               ? (Array.isArray(b.value) ? b.value : [b.value])
               : [],
           )
-          .filter((t: string) => TREATMENT_CATEGORIES.includes(t));
+          .filter((t) => TREATMENT_CATEGORIES.includes(t));
         if (tags.length === 0) continue;
         const target = ann.target;
         const selectors =

@@ -12,7 +12,7 @@ This is more focused than `tag-irac` (which annotates *every* substantive paragr
 
 ## What it does
 
-For each Case resource (or one specific resource), runs `mark.assist({ motivation: 'assessing', instructions: ... })`. Each flagged span carries an assessing-motivation annotation noting which of the four categories it falls into:
+For each Case resource (or one specific resource), runs `mark.delegate({ motivation: 'assessing', instructions: ... })`. Each flagged span carries an assessing-motivation annotation noting which of the four categories it falls into:
 
 - the **central holding(s)** — the legal conclusion(s) that decide the case
 - **dicta** — judicial commentary not necessary to the decision
@@ -21,7 +21,7 @@ For each Case resource (or one specific resource), runs `mark.assist({ motivatio
 
 ## SDK verbs
 
-- `browse.resources`, `mark.assist({ motivation: 'assessing', instructions: ... })`
+- `browse.resources`, `mark.delegate({ motivation: 'assessing', instructions: ... })`
 
 ## Parameters
 
@@ -43,11 +43,11 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/assess-holdings/script.ts'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/assess-holdings/script.ts'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Add `-e SEMIONT_INTERACTIVE=1 -it` for the confirm prompt.
 
