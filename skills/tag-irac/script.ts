@@ -4,15 +4,14 @@
  *
  * Tag schemas are runtime-registered per KB (see semiont's
  * .plans/TAG-SCHEMAS-GAP.md). This skill self-registers `legal-irac`
- * before calling `mark.assist`; re-runs are silent at the projection
+ * before calling `mark.delegate`; re-runs are silent at the projection
  * layer because the content matches.
  *
  * Usage: tsx skills/tag-irac/script.ts [<resourceId>] [--interactive]
  */
 
-import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, httpKb, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
-import { createdCount } from '../../src/mark-result.js';
 import { LEGAL_IRAC_SCHEMA } from '../../src/tag-schemas.js';
 import { getMediaType } from '../../src/media-type.js';
 
@@ -24,21 +23,25 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2).filter((a) => !a.startsWith('-'));
   const explicitResourceId = args[0];
 
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'caselaw-tag-irac',
-    label: 'caselaw tag-irac',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'caselaw-tag-irac',
+      label: 'caselaw tag-irac',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
-    // Register the schema before any mark.assist call. Idempotent — the
+    // Register the schema before any mark.delegate call. Idempotent — the
     // projection silently no-ops if the same content is already registered.
     await semiont.frame.addTagSchema(LEGAL_IRAC_SCHEMA);
 
@@ -53,7 +56,7 @@ async function main(): Promise<void> {
           const mt = getMediaType(r);
           return isCase && (mt === 'text/markdown' || mt === 'text/plain');
         })
-        .map((r) => ridBrand(r['@id']));
+        .map((r) => r['@id']);
     }
 
     if (targets.length === 0) {
@@ -63,7 +66,7 @@ async function main(): Promise<void> {
     }
 
     console.log(
-      `Will run mark.assist (motivation: tagging, schemaId: ${SCHEMA_ID}, ` +
+      `Will run mark.delegate (motivation: tagging, schemaId: ${SCHEMA_ID}, ` +
         `categories: ${CATEGORIES.join(', ')}) against ${targets.length} case(s).`,
     );
     const proceed = await confirm('Proceed?', true);
@@ -75,11 +78,12 @@ async function main(): Promise<void> {
 
     let totalCreated = 0;
     for (const rId of targets) {
-      const progress = await semiont.mark.assist(rId, 'tagging', {
+      const done = await semiont.mark.delegate(rId, {
+        motivation: 'tagging',
         schemaId: SCHEMA_ID,
         categories: CATEGORIES,
       });
-      const n = createdCount(progress);
+      const n = done.result && 'persisted' in done.result ? done.result.persisted : 0;
       totalCreated += n;
       console.log(`  ${rId}: ${n} IRAC tags`);
     }

@@ -5,7 +5,15 @@
  * Usage: tsx skills/build-citation-graph/script.ts [<caseResourceId>] [--interactive]
  */
 
-import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import {
+  SemiontSession,
+  InMemorySessionStorage,
+  httpKb,
+  getBodySource,
+  getEntityTypes,
+  resourceId as ridBrand,
+  type ResourceId,
+} from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { getMediaType } from '../../src/media-type.js';
 
@@ -25,17 +33,21 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2).filter((a) => !a.startsWith('-'));
   const explicitResourceId = args[0];
 
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'caselaw-build-citation-graph',
-    label: 'caselaw build-citation-graph',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'caselaw-build-citation-graph',
+      label: 'caselaw build-citation-graph',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -86,16 +98,10 @@ async function main(): Promise<void> {
       const annotations = await semiont.browse.annotations(info.rIdBrand).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
-        const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-        const tags = bodies
-          .flatMap((b) =>
-            b.type === 'TextualBody' && b.purpose === 'tagging'
-              ? (Array.isArray(b.value) ? b.value : [b.value])
-              : [],
-          );
+        const tags = getEntityTypes(ann);
         if (!tags.includes('Citation')) continue;
-        const targets = bodies
-          .flatMap((b) => (b.type === 'SpecificResource' && b.purpose === 'linking' ? [b.source] : []));
+        const bound = getBodySource(ann.body);
+        const targets = bound ? [bound] : [];
         for (const t of targets) {
           if (caseIndex.has(t)) {
             outgoing.get(info.rId)!.add(t);

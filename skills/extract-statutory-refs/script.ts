@@ -8,8 +8,10 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KbTarget,
-  resourceId as ridBrand,
+  httpKb,
+  getAnnotationExactText,
+  getBodySource,
+  getEntityTypes,
   type AnnotationId,
   type ResourceId,
 } from '@semiont/sdk';
@@ -29,17 +31,21 @@ interface StatutoryAnno {
 }
 
 async function main(): Promise<void> {
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'caselaw-extract-statutory-refs',
-    label: 'caselaw extract-statutory-refs',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'caselaw-extract-statutory-refs',
+      label: 'caselaw extract-statutory-refs',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -58,7 +64,7 @@ async function main(): Promise<void> {
 
     // Build an index of existing Statute resources by "title:section" key so we
     // can reuse them across multiple citing annotations.
-    const existingStatutes = new Map<string, string>();
+    const existingStatutes = new Map<string, ResourceId>();
     for (const r of all) {
       if (!(r.entityTypes ?? []).some((t) => t === 'Statute')) continue;
       const m = (r.name ?? '').match(/^(\d+)\s*U\.S\.C\.\s*§\s*(\S+)/);
@@ -68,33 +74,15 @@ async function main(): Promise<void> {
     // Collect unbound StatutoryCitation annotations across the corpus.
     const statutoryAnnotations: StatutoryAnno[] = [];
     for (const r of cases) {
-      const rId = ridBrand(r['@id']);
+      const rId = r['@id'];
       const annotations = await semiont.browse.annotations(rId).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
-        const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-        const tags = bodies
-          .flatMap((b) =>
-            b.type === 'TextualBody' && b.purpose === 'tagging'
-              ? (Array.isArray(b.value) ? b.value : [b.value])
-              : [],
-          );
+        const tags = getEntityTypes(ann);
         if (!tags.includes('StatutoryCitation')) continue;
-        const isBound = bodies.some(
-          (b) => b.type === 'SpecificResource' && b.purpose === 'linking',
-        );
+        const isBound = getBodySource(ann.body) !== null;
         if (isBound) continue;
-        const target = ann.target;
-        const selectors =
-          typeof target === 'string' || !target.selector
-            ? []
-            : Array.isArray(target.selector)
-              ? target.selector
-              : [target.selector];
-        let text = '';
-        for (const s of selectors) {
-          if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
-        }
+        const text = getAnnotationExactText(ann);
         statutoryAnnotations.push({
           rId,
           annId: ann.id,
@@ -206,7 +194,7 @@ async function main(): Promise<void> {
           entityTypes: ['Statute', 'FederalStatute'],
           storageUri: `file://generated/statute-${slugify(`${title}-${section}`)}.md`,
         });
-        statuteRId = newRId as unknown as string;
+        statuteRId = newRId;
         existingStatutes.set(key, statuteRId);
         synthesized++;
         console.log(`  + ${title} U.S.C. § ${section} → ${statuteRId}`);

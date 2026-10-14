@@ -20,14 +20,14 @@ If you're an AI assistant working in this repo, this file is your orientation. T
 |---|---|---|
 | [`ingest-cases`](skills/ingest-cases/) | Read every `<corpus>/config.yaml`, declare the KB's entity-type vocabulary, fetch the source, create one resource per case | `frame.addEntityTypes`, `yield.resource` |
 | [`detect-citations`](skills/detect-citations/) | Run eyecite over each case; record one annotation per citation | `mark.annotation` × *N* |
-| [`mark-judicial-entities`](skills/mark-judicial-entities/) | Detect Person, Judge, Plaintiff, Defendant, Counsel, Court, Date, LegalStandard mentions | `mark.assist` (linking) |
-| [`tag-irac`](skills/tag-irac/) | Apply IRAC tags (Issue / Rule / Application / Conclusion) to substantive paragraphs | `mark.assist` (tagging) |
-| [`assess-holdings`](skills/assess-holdings/) | Flag the central holdings, dicta, disposition, procedural posture | `mark.assist` (assessing) |
+| [`mark-judicial-entities`](skills/mark-judicial-entities/) | Detect Person, Judge, Plaintiff, Defendant, Counsel, Court, Date, LegalStandard mentions | `mark.delegate` (linking) |
+| [`tag-irac`](skills/tag-irac/) | Apply IRAC tags (Issue / Rule / Application / Conclusion) to substantive paragraphs | `mark.delegate` (tagging) |
+| [`assess-holdings`](skills/assess-holdings/) | Flag the central holdings, dicta, disposition, procedural posture | `mark.delegate` (assessing) |
 | [`ground-citations`](skills/ground-citations/) | Resolve every citation to a local case or fetch from CourtListener | `+ gather.annotation`, `match.search`, `bind.body`, `yield.resource` |
 | [`build-citation-graph`](skills/build-citation-graph/) | Synthesize a PrecedentGraph resource per case (cited-by, citing-of) | `+ yield.resource` per case |
 | [`extract-statutory-refs`](skills/extract-statutory-refs/) | Resolve statutory citations to Statute resources fetched from US Code | `yield.resource`, `bind.body` |
-| [`build-party-roster`](skills/build-party-roster/) | Promote Person/Judge/etc. mentions to Party resources, encode role bindings | `+ yield.fromContext` |
-| [`subsequent-treatment`](skills/subsequent-treatment/) | For a target case, classify the treatment in every citing case | `mark.assist` (tagging), `yield.resource` |
+| [`build-party-roster`](skills/build-party-roster/) | Promote Person/Judge/etc. mentions to Party resources, encode role bindings | `+ yield.delegate` |
+| [`subsequent-treatment`](skills/subsequent-treatment/) | For a target case, classify the treatment in every citing case | `mark.delegate` (tagging), `yield.resource` |
 | [`doctrinal-trace`](skills/doctrinal-trace/) | Given a doctrine query, synthesize a research memo across the corpus | full pipeline composition |
 
 ## What is caselaw research, really?
@@ -55,7 +55,7 @@ The Semiont SDK is well-suited for the structural questions (1, 3, 4, 5, 6). The
 
 ## Tag schemas
 
-This KB uses two controlled-vocabulary tag schemas applied via `mark.assist({ motivation: 'tagging', ... })`:
+This KB uses two controlled-vocabulary tag schemas applied via `mark.delegate({ motivation: 'tagging', ... })`:
 
 - **IRAC** (skill 4) — `Issue` / `Rule` / `Application` / `Conclusion`. Applied at the paragraph level. Skip narrative or procedural text.
 - **Treatment** (skill 10) — `positive` / `negative` / `distinguished` / `criticized` / `overruled` / `neutral`. Applied to citation contexts in citing cases. Override via `TREATMENT_TAG_SCHEMA` env var if a different vocabulary is preferred.
@@ -131,8 +131,8 @@ Skills are parameterized in three tiers.
 | Var | Purpose |
 |---|---|
 | `SEMIONT_API_URL` | Gateway URL (default `http://localhost:4000`) |
-| `SEMIONT_USER_EMAIL` | Authenticating user |
-| `SEMIONT_USER_PASSWORD` | Authenticating user's password |
+
+A skill signs in by the device grant: it prints an address, and a person approves in a browser. No password passes through the script. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 | `COURTLISTENER_API_KEY` | Optional; raises CourtListener rate-limit ceiling |
 | `CONTAINER_RUNTIME` | `container` / `docker` / `podman` (default `container`) — used by `skills/detect-citations/run.sh` |
 | `EYECITE_IMAGE_TAG` | Default `semiont-eyecite:latest` — override if you tag the image differently |
@@ -160,7 +160,7 @@ If you're an agent unfamiliar with U.S. legal-analysis conventions: **IRAC** is 
 | Where | What |
 |---|---|
 | [`@semiont/sdk` README](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk) | The TypeScript surface — eight verbs (frame, yield, mark, match, bind, gather, browse, beckon) plus admin/auth/job. |
-| [SDK Usage docs](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk/docs) | Cache semantics, reactive model, state units, error handling. |
+| [SDK Usage docs](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/Usage.md) | Cache semantics, reactive model, state units, error handling. |
 | [Semiont protocol docs](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol) | The eight-flow framing. |
 | [eyecite](https://github.com/freelawproject/eyecite) | The Python library used in skill 2. |
 | [CourtListener API](https://www.courtlistener.com/api/) | The REST API used in skill 6 for citation grounding. |
