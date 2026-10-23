@@ -23,7 +23,7 @@ import { ALL_SCHEMAS } from '../../src/tag-schemas.js';
 
 async function main(): Promise<void> {
   const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const session = await SemiontSession.signInDevice({
+  const opened = await SemiontSession.signInDevice({
     kb: httpKb({
       id: 'caselaw-register-tag-schemas',
       label: 'caselaw register-tag-schemas',
@@ -37,7 +37,7 @@ async function main(): Promise<void> {
       if (!verificationUriComplete) console.error(`Code: ${userCode}`);
     },
   });
-  const semiont = session.client;
+  const semiont = opened.session.client;
 
   try {
     for (const schema of ALL_SCHEMAS) {
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
 
     console.log(`\nDone. ${ALL_SCHEMAS.length} schema(s) registered.`);
   } finally {
-    await session.dispose();
+    opened.dispose();
   }
 }
 

@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   const explicitResourceId = args[0];
 
   const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const session = await SemiontSession.signInDevice({
+  const opened = await SemiontSession.signInDevice({
     kb: httpKb({
       id: 'caselaw-tag-irac',
       label: 'caselaw tag-irac',
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
       if (!verificationUriComplete) console.error(`Code: ${userCode}`);
     },
   });
-  const semiont = session.client;
+  const semiont = opened.session.client;
 
   try {
     // Register the schema before any mark.delegate call. Idempotent — the
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
     console.log(`\nDone. Created ${totalCreated} IRAC-tagged annotations.`);
     closeInteractive();
   } finally {
-    await session.dispose();
+    opened.dispose();
   }
 }
 
