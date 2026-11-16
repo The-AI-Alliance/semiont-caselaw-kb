@@ -21,11 +21,11 @@ A well-written opinion makes IRAC structure explicit. Many opinions don't, and a
 
 ## What it does
 
-For each Case resource (or one specific resource), runs `mark.delegate({ motivation: 'tagging', instructions: ..., entityTypes: ['Issue', 'Rule', 'Application', 'Conclusion'] })`. Each tagged span carries one of the four IRAC tags as its body.
+For each Case resource (or one specific resource), runs `mark.assist({ motivation: 'tagging', instructions: ..., entityTypes: ['Issue', 'Rule', 'Application', 'Conclusion'] })`. Each tagged span carries one of the four IRAC tags as its body.
 
 ## SDK verbs
 
-- `browse.resources`, `mark.delegate({ motivation: 'tagging', ... })`
+- `browse.resources`, `mark.assist({ motivation: 'tagging', ... })`
 
 ## Parameters
 
@@ -47,16 +47,16 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
+  -e SEMIONT_USER_EMAIL=admin@example.com \
+  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/tag-irac/script.ts'
+  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/tag-irac/script.ts'
 ```
-
-The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Add `-e SEMIONT_INTERACTIVE=1 -it` for the confirm prompt.
 
 ## Guidance for the AI assistant
 
-- **Quality scales with the model.** With a stronger inference model (Claude Opus / Sonnet), IRAC tagging is reasonably accurate; with smaller models, expect more mis-classifications. Spot-check a few cases interactively before running the corpus-wide pass.
+- **Quality scales with the model.** With a stronger backend model (Claude Opus / Sonnet), IRAC tagging is reasonably accurate; with smaller models, expect more mis-classifications. Spot-check a few cases interactively before running the corpus-wide pass.
 - **The Rule + Application tags drive `doctrinal-trace`.** Skill 11 walks Rule paragraphs to find cases that articulate a doctrine, and Application paragraphs to see how the doctrine has been applied.
 - **One tag per paragraph; not every paragraph gets one.** Procedural posture, factual narration, and meta-commentary stay un-tagged. Re-tuning the directive via `IRAC_INSTRUCTIONS` is how you change that policy.

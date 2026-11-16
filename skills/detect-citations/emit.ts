@@ -10,14 +10,14 @@
  * Usage: tsx skills/detect-citations/emit.ts <inDir>
  */
 
-import { SemiontSession, InMemorySessionStorage, httpKb, resourceId as ridBrand } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand } from '@semiont/sdk';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 // How much surrounding text to include in TextQuoteSelector.prefix /
 // .suffix. Enough to disambiguate citation A from a textually-identical
 // citation B elsewhere in the same opinion; small enough not to bloat
-// the JSON. Matches the ~80-char window mark.delegate uses.
+// the JSON. Matches the ~80-char window mark.assist uses.
 const CONTEXT_WINDOW = 80;
 
 interface DetectedCitation {
@@ -61,22 +61,18 @@ async function main(): Promise<void> {
     return;
   }
 
-  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const opened = await SemiontSession.signInDevice({
-    kb: httpKb({
-      id: 'caselaw-detect-citations-emit',
-      label: 'caselaw detect-citations-emit',
-      host: gateway.hostname,
-      port: Number(gateway.port) || 4000,
-      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
-    }),
-    storage: new InMemorySessionStorage(),
-    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
-      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
-      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
-    },
-  });
-  const semiont = opened.session.client;
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KbTarget = {
+    id: 'caselaw-detect-citations-emit',
+    label: 'caselaw detect-citations-emit',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   try {
     let totalCreated = 0;
@@ -132,7 +128,7 @@ async function main(): Promise<void> {
 
     console.log(`\nDone. Created ${totalCreated} citation annotation(s) (${totalFailed} failed).`);
   } finally {
-    opened.dispose();
+    await session.dispose();
   }
 }
 

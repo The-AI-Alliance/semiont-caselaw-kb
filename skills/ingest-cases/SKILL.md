@@ -38,18 +38,18 @@ Before bulk upload: `confirm` after showing per-corpus counts.
 
 ## Run it
 
-**Prerequisite: the Semiont stack is running** — see [AGENTS.md › Stack setup](../../AGENTS.md#stack-setup).
+**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup).
 
 ```bash
 HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
+  -e SEMIONT_USER_EMAIL=admin@example.com \
+  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/ingest-cases/script.ts'
+  sh -c 'npm install --silent --no-fund @semiont/sdk tsx yaml && npx tsx skills/ingest-cases/script.ts'
 ```
-
-The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Note the additional `yaml` package — required for parsing the per-corpus configs.
 
@@ -57,7 +57,7 @@ Add `-e SEMIONT_INTERACTIVE=1 -it` to enable the confirm prompt.
 
 ## Guidance for the AI assistant
 
-- **Re-running creates duplicates.** No deduplication. To start fresh, restart the stack.
+- **Re-running creates duplicates.** No deduplication. To start fresh, restart the backend stack.
 - **The configs are user-editable.** A user wanting to swap in a different `free-law/*` dataset edits `caselaw/config.yaml`'s `dataset:` line; substituting a different Cornell LII opinion edits `citizens_united/config.yaml`'s `url:`. The skill doesn't know or care which dataset / opinion is in play.
 - **Whole opinions become one resource.** The seeded `chunkSize` field in `citizens_united/config.yaml` is informational. The skills that follow operate on per-resource bodies; chunking would force every cross-reference to know which chunk a span lived in. If you need chunked navigation later, consider a follow-up skill that decomposes a Case into per-section LegalSection resources (similar to `semiont-legal-kb/build-section-graph`).
 - **HuggingFace requests are unauthenticated.** Datasets-Server has rate limits — for a `count` of 100, a single page request returns all rows. If you bump `count` significantly higher you'll need pagination.

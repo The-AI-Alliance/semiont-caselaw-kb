@@ -13,7 +13,7 @@ import { join } from 'node:path';
 
 import yaml from 'yaml';
 
-import { SemiontSession, InMemorySessionStorage, httpKb } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget } from '@semiont/sdk';
 import { fetchFirstNDocuments, convertLegalCaseDocument, type DocumentInfo } from '../../src/huggingface.js';
 import { downloadCornellLII, formatLegalOpinion } from '../../src/legal-text.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
@@ -229,22 +229,18 @@ async function main(): Promise<void> {
     return;
   }
 
-  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const opened = await SemiontSession.signInDevice({
-    kb: httpKb({
-      id: 'caselaw-ingest-cases',
-      label: 'caselaw ingest-cases',
-      host: gateway.hostname,
-      port: Number(gateway.port) || 4000,
-      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
-    }),
-    storage: new InMemorySessionStorage(),
-    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
-      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
-      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
-    },
-  });
-  const semiont = opened.session.client;
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KbTarget = {
+    id: 'caselaw-ingest-cases',
+    label: 'caselaw ingest-cases',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   try {
     // Declare this KB's entity-type vocabulary via frame. Idempotent.
@@ -282,7 +278,7 @@ async function main(): Promise<void> {
     console.log(`\nDone. ${created} resources created, ${failed} failed.`);
     closeInteractive();
   } finally {
-    opened.dispose();
+    await session.dispose();
   }
 }
 

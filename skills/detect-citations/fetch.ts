@@ -16,7 +16,7 @@
  * Usage: tsx skills/detect-citations/fetch.ts <outDir> [<resourceId>]
  */
 
-import { SemiontSession, InMemorySessionStorage, httpKb, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getMediaType } from '../../src/media-type.js';
@@ -31,22 +31,18 @@ async function main(): Promise<void> {
 
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 
-  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const opened = await SemiontSession.signInDevice({
-    kb: httpKb({
-      id: 'caselaw-detect-citations-fetch',
-      label: 'caselaw detect-citations-fetch',
-      host: gateway.hostname,
-      port: Number(gateway.port) || 4000,
-      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
-    }),
-    storage: new InMemorySessionStorage(),
-    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
-      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
-      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
-    },
-  });
-  const semiont = opened.session.client;
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KbTarget = {
+    id: 'caselaw-detect-citations-fetch',
+    label: 'caselaw detect-citations-fetch',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   try {
     let targets: ResourceId[];
@@ -60,7 +56,7 @@ async function main(): Promise<void> {
           const mt = getMediaType(r);
           return isCase && (mt === 'text/markdown' || mt === 'text/plain');
         })
-        .map((r) => r['@id']);
+        .map((r) => ridBrand(r['@id']));
     }
 
     if (targets.length === 0) {
@@ -80,7 +76,7 @@ async function main(): Promise<void> {
       }
     }
   } finally {
-    opened.dispose();
+    await session.dispose();
   }
 }
 

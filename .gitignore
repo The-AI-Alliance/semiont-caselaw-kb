@@ -1,3 +1,5 @@
 .plans
+.devcontainer/.env
 .cache/
 node_modules
+
